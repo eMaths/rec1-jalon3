@@ -6,6 +6,50 @@ Pour la problématique, il faut fournir une analyse de la problématique et iden
 - l'ensemble des sujets et mot clés en parfait alignement avec la problématiques, le thèmes en lien indirect.
 - l'ensemble des sujets et mot clés qui peuvent être en lien avec la problématiques, le thèmes en lien indirect ou thèmes secondaires AUTOUR de la problématique.
 
+---
+
+## Outils disponibles
+
+Des outils Python sont disponibles dans `../tools/` pour automatiser la récupération des métadonnées des articles.
+
+### 1. `fetch_article.py` - Récupération d'un seul article
+
+Récupère les métadonnées (titre, auteurs, abstract, journal, année, mots-clés) d'un article via son DOI en utilisant plusieurs APIs (OpenAlex, Semantic Scholar, CrossRef, Unpaywall).
+
+**Usage:**
+```bash
+cd /home/install/miage_sbi/rec1/jalon3/tools
+python fetch_article.py <DOI>
+```
+
+**Exemple:**
+```bash
+python fetch_article.py 10.1145/3598301
+```
+
+**Sortie:** JSON avec les champs `doi`, `title`, `authors`, `abstract`, `journal`, `year`, `keywords`, `success`, `source`.
+
+### 2. `process_articles.py` - Traitement automatique de tous les articles
+
+Script complet qui :
+1. Lit tous les articles de `../data/articles.csv`
+2. Récupère les métadonnées via les APIs
+3. Analyse la pertinence par rapport à la problématique Green AI
+4. Génère `../results/result.csv` avec les colonnes requises
+5. Génère `../results/article_fetch_log.md` avec le log détaillé
+
+**Usage:**
+```bash
+cd /home/install/miage_sbi/rec1/jalon3/tools
+python process_articles.py
+```
+
+**Note:** Le script inclut déjà les mots-clés pertinents et non-pertinents pour la problématique Green AI.
+
+---
+
+## Processus manuel (si les outils ne sont pas utilisés)
+
 Avant de commencer preparer un nouveau csv, `result.csv` dans ../results/ lequel tu mettras les colonnes suivantes :
 
 ```text
@@ -14,7 +58,7 @@ Selection	title	abstract	author	journal	Issue type	year	doi	keywords justificati
 
 1. Pour chaque article du fichier ../data/articles.csv, récupère le lien dans la colonne "doi".
 
-> Grâce à ce lien, tu récupères deux choses : le titre de l'article ainsi que l'abstract
+> Grâce à ce lien, tu récupères deux choses : le titre de l'article ainsi que l'abstract (utilise `python fetch_article.py <DOI>` pour récupérer ces informations)
 > Les liens, le nom de l'article et les auteurs tu vas les mettre dans un fichier markdown  `../results/article_fetch_log.md` pour me permettre de suivre ton processus et m'assurer que tu fetch les bonnes données, pour chaque article tu mets le titre, les auteurs, le lien, le doi, et l'abstract, les raisons de pourquoi l'article est pertinent et les raisons de pourquoi l'article n'est pas pertinent.
 
 Pour les justifications tu dois expliquer si l'article est TRES pertinent en lien direct ou pourquoi il l'est quand même mais de façon indirecte et pourquoi il pourrait servir comme élément de réponse à la problématique.
