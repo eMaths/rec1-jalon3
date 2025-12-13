@@ -4,25 +4,32 @@
 
 Analyser chaque article récupéré à l'étape 3 pour déterminer sa **pertinence par rapport à la problématique**.
 
-Cette analyse est faite **par toi** (l'IA), en te basant sur :
-- Le **titre** de l'article
-- L'**abstract** de l'article
-- Les **thèmes identifiés** à l'étape 2 (`../results/analyse_problematique.md`)
-
 **Fichiers d'entrée :**
-- `../results/articles_fetched.md` — Métadonnées des articles
-- `../results/analyse_problematique.md` — Thèmes de référence (primaires, secondaires, voisins)
+- `../results/articles_fetched.md` — Métadonnées des articles (étape 3)
+- `../results/analyse_problematique.md` — Thèmes de référence (étape 2)
 
 **Fichier de sortie :**
 - `../results/first_analysis.md` — Analyse de pertinence de chaque article
 
 ---
 
-## 2. Processus d'analyse
+## 2. Commande à exécuter
 
-Pour **chaque article**, applique le processus suivant dans l'ordre :
+```bash
+python3 ../tools/analyze_articles/analyze_all.py
+```
 
-### Étape 4.1 — Analyse du titre
+Le script analyse automatiquement chaque article en se basant sur :
+- Les **thèmes** extraits de `analyse_problematique.md` (primaires, secondaires, voisins)
+- Les **concepts clés** (verbes et noms) identifiés à l'étape 2
+
+---
+
+## 3. Processus d'analyse (appliqué par le script)
+
+Pour **chaque article**, le script applique le processus suivant :
+
+### Étape 1 — Analyse du titre
 
 1. Lis le titre de l'article
 2. Compare-le aux thèmes identifiés à l'étape 2
@@ -32,7 +39,7 @@ Pour **chaque article**, applique le processus suivant dans l'ordre :
 | Le titre indique clairement que l'article est **hors sujet** | → Rejeter l'article (Selection = `non pertinent`, Justification = `Titre hors sujet`) |
 | Le titre suggère un **lien possible** avec la problématique ou le thème de la problématique | → Passer à l'analyse de l'abstract |
 
-### Étape 4.2 — Analyse de l'abstract
+### Étape 2 — Analyse de l'abstract
 
 1. Lis l'abstract de l'article
 2. Identifie les thèmes abordés et compare-les à ceux de l'étape 2
@@ -42,7 +49,7 @@ Pour **chaque article**, applique le processus suivant dans l'ordre :
 | L'abstract confirme que l'article est **hors sujet** | → Rejeter l'article (Selection = `non pertinent`, Justification = `Abstract hors sujet`) |
 | L'abstract confirme une **pertinence potentielle** selon les thèmes identifiés à l'étape 2 dans le fichier `../results/analyse_problematique.md` | → Accepter l'article (Selection = `pertinent`, Justification = `Prêt pour analyse approfondie`) |
 
-### Étape 4.3 — Classification par catégorie
+### Étape 3 — Classification par catégorie
 
 Pour les articles retenus, indique à quelle catégorie de thèmes ils correspondent :
 - **A. Thème primaire** — Lien direct avec la problématique
@@ -51,7 +58,7 @@ Pour les articles retenus, indique à quelle catégorie de thèmes ils correspon
 
 ---
 
-## 3. Principes de classification (règles générales)
+## 4. Principes de classification (règles générales)
 
 ### Principe 1 : Distinguer "étudier le sujet" vs "utiliser le sujet comme outil"
 
@@ -101,7 +108,7 @@ Un article est **hors sujet** uniquement s'il :
 
 ---
 
-## 4. Règles d'analyse
+## 5. Règles d'analyse
 
 ### À faire
 - Te baser **uniquement** sur le titre et l'abstract (pas sur tes connaissances externes)
@@ -119,7 +126,7 @@ Un article est **hors sujet** uniquement s'il :
 
 ---
 
-## 5. Format du fichier de sortie
+## 6. Format du fichier de sortie
 
 Le fichier `../results/first_analysis.md` doit suivre **exactement** ce squelette :
 
@@ -177,7 +184,7 @@ Le fichier `../results/first_analysis.md` doit suivre **exactement** ce squelett
 
 ---
 
-## 6. Validation
+## 7. Validation
 
 Avant de passer à l'étape suivante, vérifie que :
 - [ ] Le fichier `../results/first_analysis.md` existe
