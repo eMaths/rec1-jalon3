@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""
-Outil one-shot pour récupérer TOUS les abstracts des articles.
+"""Outil one-shot pour récupérer TOUS les abstracts des articles.
 Usage: python3 fetch_all.py
 
 Lit articles.csv et génère:
 - results/articles_metadata.csv
-- results/articles_fetched.md
+- results/articles_fetched.md (articles avec abstracts complets)
+- results/missing_abstracts.md (articles sans abstract, à compléter manuellement)
 """
 
 import csv
@@ -29,6 +29,7 @@ def fetch_all_articles():
     results_dir = os.path.join(base_dir, "results")
     output_csv = os.path.join(results_dir, "articles_metadata.csv")
     output_md = os.path.join(results_dir, "articles_fetched.md")
+    missing_md = os.path.join(results_dir, "missing_abstracts.md")
     
     # Créer le dossier results
     os.makedirs(results_dir, exist_ok=True)
@@ -144,15 +145,29 @@ def fetch_all_articles():
             f.write(f"> {r.get('abstract', 'Non disponible')}\n\n")
             f.write("---\n\n")
         
-        # Articles sans abstracts
-        if invalid_abstracts:
-            f.write("## ⚠️ Articles sans abstract complet\n\n")
-            f.write("| # | Titre | DOI | Sources essayées |\n")
-            f.write("|---|-------|-----|------------------|\n")
+    # Générer le fichier des abstracts manquants
+    if invalid_abstracts:
+        with open(missing_md, 'w', encoding='utf-8') as f:
+            f.write("# Articles sans abstract\n\n")
+            f.write(f"*Généré le {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
+            f.write(f"**{len(invalid_abstracts)} article(s)** nécessitent une intervention manuelle.\n\n")
+            f.write("## Instructions\n\n")
+            f.write("1. Pour chaque article ci-dessous, ouvrez le lien DOI\n")
+            f.write("2. Copiez l'abstract depuis la page de l'article\n")
+            f.write("3. Collez-le à l'emplacement indiqué (remplacez `[COLLER L'ABSTRACT ICI]`)\n")
+            f.write("4. Une fois terminé, informez l'agent IA pour continuer\n\n")
+            f.write("---\n\n")
+            
             for i, r in enumerate(invalid_abstracts, 1):
-                title = r.get('title', 'N/A')[:40] + "..." if len(r.get('title', '')) > 40 else r.get('title', 'N/A')
-                sources_tried = ', '.join(r.get('sources_tried', []))
-                f.write(f"| {i} | {title} | `{r.get('doi')}` | {sources_tried} |\n")
+                f.write(f"### Article {i} : {r.get('title', 'Sans titre')}\n\n")
+                f.write(f"- **DOI :** `{r.get('doi')}`\n")
+                f.write(f"- **Lien :** https://doi.org/{r.get('doi')}\n")
+                f.write(f"- **Auteurs :** {r.get('authors', 'N/A')}\n")
+                f.write(f"- **Journal :** {r.get('journal', 'N/A')}\n")
+                f.write(f"- **Année :** {r.get('year', 'N/A')}\n\n")
+                f.write("**Abstract (à compléter) :**\n\n")
+                f.write("> [COLLER L'ABSTRACT ICI]\n\n")
+                f.write("---\n\n")
     
     # Résumé final
     print("\n" + "=" * 60)
@@ -165,6 +180,17 @@ def fetch_all_articles():
     print(f"\n📁 Fichiers générés:")
     print(f"   - {output_csv}")
     print(f"   - {output_md}")
+    if invalid_abstracts:
+        print(f"   - {missing_md}")
+        print("\n" + "=" * 60)
+        print(f"⚠️  ATTENTION : {len(invalid_abstracts)} article(s) sans abstract !")
+        print("=" * 60)
+        print(f"\nVeuillez compléter le fichier : {missing_md}")
+        print("\nPour chaque article listé :")
+        print("  1. Ouvrez le lien DOI dans votre navigateur")
+        print("  2. Copiez l'abstract depuis la page de l'article")
+        print("  3. Collez-le dans le fichier à l'emplacement indiqué")
+        print("\nUne fois terminé, dites \"c'est fait\" à l'agent IA.")
     print("=" * 60)
 
 

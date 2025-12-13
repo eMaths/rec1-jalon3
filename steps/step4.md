@@ -20,11 +20,29 @@ Cette étape se fait en **deux phases** :
 
 ## 2. Phase A : Pré-filtrage automatique
 
-### Commande à exécuter
+### Commandes disponibles
+
+#### Analyser tous les articles
 
 ```bash
 python3 ../tools/analyze_articles/analyze_all.py
 ```
+
+#### Analyser le titre d'un article (test)
+
+```python
+from analyze_title import analyze_title
+result = analyze_title("Energy-Efficient Deep Learning", keywords)
+```
+
+#### Analyser l'abstract d'un article (test)
+
+```python
+from analyze_abstract import analyze_abstract
+result = analyze_abstract(abstract_text, keywords, title_analysis)
+```
+
+### Résultat
 
 Le script génère `../results/candidates.md` avec :
 - Les articles dont le titre ou l'abstract contient des mots-clés de `keywords.json`
