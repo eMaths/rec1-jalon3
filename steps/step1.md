@@ -1,115 +1,65 @@
-# Processus de sélection
+# Projet : Classification d'articles scientifiques pour une revue systématique
 
-Tu trouveras la problématique dans ../data/problematique.md
+# Etape 1 : Prendre connaissance du projet et des consignes
 
-Pour la problématique, il faut fournir une analyse de la problématique et identifier 2 choses : 
-- l'ensemble des sujets et mot clés en parfait alignement avec la problématiques, le thèmes en lien indirect.
-- l'ensemble des sujets et mot clés qui peuvent être en lien avec la problématiques, le thèmes en lien indirect ou thèmes secondaires AUTOUR de la problématique.
+## 1. Objectif principal
 
----
+Tu es un assistant IA chargé de **classifier et trier des articles scientifiques** selon un processus méthodologique strict et reproductible.
 
-## Outils disponibles
-
-Des outils Python sont disponibles dans `../tools/` pour automatiser la récupération des métadonnées des articles.
-
-### 1. `fetch_article.py` - Récupération d'un seul article
-
-Récupère les métadonnées (titre, auteurs, abstract, journal, année, mots-clés) d'un article via son DOI en utilisant plusieurs APIs (OpenAlex, Semantic Scholar, CrossRef, Unpaywall).
-
-**Usage:**
-```bash
-cd /home/install/miage_sbi/rec1/jalon3/tools
-python fetch_article.py <DOI>
-```
-
-**Exemple:**
-```bash
-python fetch_article.py 10.1145/3598301
-```
-
-**Sortie:** JSON avec les champs `doi`, `title`, `authors`, `abstract`, `journal`, `year`, `keywords`, `success`, `source`.
-
-### 2. `process_articles.py` - Traitement automatique de tous les articles
-
-Script complet qui :
-1. Lit tous les articles de `../data/articles.csv`
-2. Récupère les métadonnées via les APIs
-3. Analyse la pertinence par rapport à la problématique Green AI
-4. Génère `../results/result.csv` avec les colonnes requises
-5. Génère `../results/article_fetch_log.md` avec le log détaillé
-
-**Usage:**
-```bash
-cd /home/install/miage_sbi/rec1/jalon3/tools
-python process_articles.py
-```
-
-**Note:** Le script inclut déjà les mots-clés pertinents et non-pertinents pour la problématique Green AI.
+**But final :** Produire une sélection d'articles pertinents pour répondre à la problématique de recherche définie dans `../data/problematique.md`.
 
 ---
 
-## Processus manuel (si les outils ne sont pas utilisés)
+## 2. Structure du projet
 
-Avant de commencer preparer un nouveau csv, `result.csv` dans ../results/ lequel tu mettras les colonnes suivantes :
+| Dossier/Fichier | Description |
+|-----------------|-------------|
+| `./steps/` | Étapes du processus (fichiers Markdown numérotés) |
+| `../data/` | Données d'entrée (articles.csv, problematique.md) |
+| `../tools/` | Scripts Python pour automatiser certaines tâches |
+| `../results/` | **Seul dossier où tu peux écrire** — tes fichiers de sortie |
 
-```text
-Selection	title	abstract	author	journal	Issue type	year	doi	keywords justification
-```
-
-1. Pour chaque article du fichier ../data/articles.csv, récupère le lien dans la colonne "doi".
-
-> Grâce à ce lien, tu récupères deux choses : le titre de l'article ainsi que l'abstract (utilise `python fetch_article.py <DOI>` pour récupérer ces informations)
-> Les liens, le nom de l'article et les auteurs tu vas les mettre dans un fichier markdown  `../results/article_fetch_log.md` pour me permettre de suivre ton processus et m'assurer que tu fetch les bonnes données, pour chaque article tu mets le titre, les auteurs, le lien, le doi, et l'abstract, les raisons de pourquoi l'article est pertinent et les raisons de pourquoi l'article n'est pas pertinent.
-
-Pour les justifications tu dois expliquer si l'article est TRES pertinent en lien direct ou pourquoi il l'est quand même mais de façon indirecte et pourquoi il pourrait servir comme élément de réponse à la problématique.
-
-le format exigé pour chaque article est le suivant : 
-
-```markdown
-## Article: Titre de l'article
-- Auteurs: Liste des auteurs
-- Lien: [DOI](https://doi.org/lien_doi)
-- Abstract: Résumé de l'article
-- themes abordés dans l'article (classé par ordre "principalement abordé"): 
-    - theme1
-    - theme2
-    - theme3
-
-- Article retenu ? True/False
-- Raisons : 
-    - arg1
-    - arg2
-    - arg3
-```
-
-## Analyse du titre
-
-Lire le titre de l’article.
-
-
-### 1. Si le titre indique clairement que l’article n’est pas lié au sujet cible :
-
-> Rejeter l’article, cela veut dire que tu mets "non pertinent" dans la colonne "Selection" et tu mets "Titre non pertinent" dans la colonne "justification".
-
-Arrêter le traitement de cette source et passe à la suivante.
 ---
 
-### 2. Sinon (le titre suggère un lien possible avec le sujet) :
+## 3. Règles de fonctionnement
 
-Passer à l’étape suivante.
+### 3.1 Permissions
+- ❌ **Interdit** : Modifier les fichiers du projet (steps, data, tools)
+- ✅ **Autorisé** : Créer et modifier des fichiers uniquement dans `../results/`
+- ✅ **Autorisé** : Créer le dossier `../results/` s'il n'existe pas
+
+### 3.2 Méthodologie
+- **Suis les étapes dans l'ordre** : step1.md → step2.md → ...
+- **Exécute exactement ce qui est demandé** : ni plus, ni moins
+- **Conserve les fichiers produits** : chaque étape peut réutiliser les sorties des étapes précédentes
+- **Reproductibilité** : ta méthode doit donner le même résultat si appliquée par une autre personne ou IA
+
+### 3.3 Communication
+- **En cas de doute** : pose une question claire et précise avant d'agir
+- **En cas de blocage** : décris le problème exact pour qu'on le résolve ensemble
+- **Préfère demander** plutôt que de faire des suppositions incorrectes
+- **Tout le temps** justifie tes choix, tes actions, ce que tu écris dans des fichiers markdown
+
 ---
 
+## 4. Ressources disponibles
 
-### 2. Analyse du résumé (abstract)
+### Données d'entrée
+- `../data/articles.csv` — Liste des articles à analyser (DOI, métadonnées)
+- `../data/problematique.md` — Problématique de recherche à laquelle les articles doivent répondre
 
-Lire l’abstract de l’article.
+### Outils
+- `../tools/fetch_articles/` — Scripts pour récupérer les métadonnées d'articles via leur DOI
+- `../tools/pdf_to_markdown/` — Scripts pour convertir des PDF en Markdown
 
-### 1. Si l’abstract indique que l’article n’est pas pertinent pour le sujet :
+Les outils seront présentés en détail dans les étapes concernées.
 
-Rejeter l’article, cela veut dire que tu mets "non pertinent" dans la colonne "Selection" et tu mets "Abstract non pertinent" dans la colonne "justification".
+---
 
-Arrêter le traitement de cette source et passe à la suivante.
+## 5. Démarrage
 
-#### 2. Sinon (l’abstract confirme une pertinence potentielle) :
+**Prérequis avant de continuer :**
+1. As-tu compris l'objectif du projet ?
+2. As-tu des questions sur les règles ou la structure ?
 
-Tu acceptes l'article, cela veut dire que tu mets "pertinent" dans la colonne "Selection" et tu mets "Prêt pour analyse de l'article" dans la colonne "justification". 
+**Si tout est clair** → Passe directement à l'étape suivante, pas besoin de m'interroger ou me le proposer: `./step2.md`

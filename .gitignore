@@ -1,3 +1,4 @@
 tools/__pycache__
 results/
-pdfs_
+pdf_to_markdown/__pycache__
+*.html
