@@ -10,6 +10,74 @@ import json
 import sys
 import re
 from urllib.parse import quote
+from typing import Optional, Dict, List
+
+# Pour le scraping HTML comme dernier recours
+try:
+    from bs4 import BeautifulSoup
+    HAS_BS4 = True
+except ImportError:
+    HAS_BS4 = False
+
+
+# Seuil minimum pour considérer un abstract comme "complet"
+# Un abstract scientifique typique fait 150-300 mots (environ 1000-2000 caractères)
+MIN_ABSTRACT_LENGTH = 200  # caractères minimum
+MIN_ABSTRACT_WORDS = 30    # mots minimum
+
+
+def is_valid_abstract(abstract: str) -> bool:
+    """
+    Vérifie si un abstract est valide (non vide, pas tronqué, assez long).
+    Un abstract scientifique complet fait généralement 150-300 mots.
+    """
+    if not abstract or abstract == "Non disponible":
+        return False
+    
+    # Vérifier la longueur minimale
+    if len(abstract) < MIN_ABSTRACT_LENGTH:
+        return False
+    
+    word_count = len(abstract.split())
+    if word_count < MIN_ABSTRACT_WORDS:
+        return False
+    
+    # Détecter les abstracts tronqués
+    abstract_stripped = abstract.strip()
+    
+    # Finit par "..." ou "…"
+    if abstract_stripped.endswith("...") or abstract_stripped.endswith("…"):
+        return False
+    
+    # Finit par une phrase incomplète (pas de ponctuation finale)
+    # Un abstract complet devrait finir par . ! ? ou )
+    if not any(abstract_stripped.endswith(p) for p in ['.', '!', '?', ')', '"', "'"]):
+        # Vérifier si c'est vraiment tronqué (moins de 500 caractères sans ponctuation finale)
+        if len(abstract_stripped) < 500:
+            return False
+    
+    return True
+
+
+def clean_abstract(abstract: str) -> str:
+    """
+    Nettoie un abstract (supprime HTML, normalise les espaces).
+    """
+    if not abstract:
+        return "Non disponible"
+    
+    # Supprimer les balises HTML
+    abstract = re.sub(r'<[^>]+>', '', abstract)
+    
+    # Supprimer les entités HTML
+    abstract = re.sub(r'&[a-zA-Z]+;', ' ', abstract)
+    abstract = re.sub(r'&#\d+;', ' ', abstract)
+    
+    # Normaliser les espaces
+    abstract = re.sub(r'\s+', ' ', abstract)
+    abstract = abstract.strip()
+    
+    return abstract if abstract else "Non disponible"
 
 
 def reconstruct_abstract(inverted_index: dict) -> str:
@@ -31,7 +99,7 @@ def reconstruct_abstract(inverted_index: dict) -> str:
     
     # Reconstruire le texte
     abstract = " ".join([word for _, word in words_positions])
-    return abstract
+    return clean_abstract(abstract)
 
 
 def fetch_from_openalex(doi: str) -> dict:
@@ -256,10 +324,228 @@ def fetch_from_crossref(doi: str) -> dict:
         return None
 
 
+def fetch_from_europe_pmc(doi: str) -> dict:
+    """
+    Récupère les métadonnées via Europe PMC API.
+    Excellente source pour les abstracts scientifiques complets.
+    """
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:{doi}&format=json&resultType=core"
+    
+    headers = {
+        "User-Agent": "ArticleFetcher/1.0"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = data.get("resultList", {}).get("result", [])
+        if not results:
+            return None
+        
+        article = results[0]
+        
+        title = article.get("title", "Non disponible")
+        
+        # Extraire les auteurs
+        author_list = article.get("authorList", {}).get("author", [])
+        authors = [a.get("fullName", "") for a in author_list if a.get("fullName")]
+        authors_str = ", ".join(authors) if authors else "Non disponible"
+        
+        # Abstract - Europe PMC a souvent des abstracts complets
+        abstract = article.get("abstractText", "Non disponible")
+        abstract = clean_abstract(abstract)
+        
+        journal = article.get("journalTitle", "Non disponible")
+        year = article.get("pubYear", "Non disponible")
+        
+        # Mots-clés
+        keywords_list = article.get("keywordList", {}).get("keyword", [])
+        keywords_str = ", ".join(keywords_list[:5]) if keywords_list else "Non disponible"
+        
+        return {
+            "doi": doi,
+            "title": title,
+            "authors": authors_str,
+            "abstract": abstract,
+            "journal": journal,
+            "year": year,
+            "keywords": keywords_str,
+            "success": True,
+            "source": "EuropePMC"
+        }
+        
+    except requests.exceptions.RequestException as e:
+        return None
+
+
+def fetch_from_doi_scraping(doi: str) -> dict:
+    """
+    Dernier recours: scraper la page DOI.org pour récupérer l'abstract.
+    Nécessite BeautifulSoup.
+    """
+    if not HAS_BS4:
+        return None
+    
+    url = f"https://doi.org/{doi}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=30, allow_redirects=True)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        candidates = []
+        
+        # Stratégie 1: meta tag DC.description ou citation_abstract
+        for meta_name in ['DC.description', 'citation_abstract', 'description', 'og:description']:
+            meta = soup.find('meta', {'name': meta_name}) or soup.find('meta', {'property': meta_name})
+            if meta and meta.get('content'):
+                content = clean_abstract(meta['content'])
+                if len(content) > 50:
+                    candidates.append(content)
+        
+        # Stratégie 2: section/div avec class contenant "abstract"
+        for elem in soup.find_all(['div', 'section', 'article', 'p'], class_=lambda x: x and 'abstract' in str(x).lower() if x else False):
+            text = elem.get_text(separator=' ', strip=True)
+            text = clean_abstract(text)
+            # Supprimer le mot "Abstract" au début s'il est présent
+            if text.lower().startswith('abstract'):
+                text = text[8:].strip()
+                if text.startswith(':'):
+                    text = text[1:].strip()
+            if len(text) > 100:
+                candidates.append(text)
+        
+        # Stratégie 3: élément avec id contenant "abstract"
+        for elem in soup.find_all(id=lambda x: x and 'abstract' in x.lower() if x else False):
+            text = elem.get_text(separator=' ', strip=True)
+            text = clean_abstract(text)
+            if text.lower().startswith('abstract'):
+                text = text[8:].strip()
+                if text.startswith(':'):
+                    text = text[1:].strip()
+            if len(text) > 100:
+                candidates.append(text)
+        
+        # Stratégie 4: heading "Abstract" suivi de paragraphes
+        for heading in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5']):
+            heading_text = heading.get_text().strip().lower()
+            if heading_text == 'abstract' or heading_text.startswith('abstract'):
+                # Récupérer tous les paragraphes suivants jusqu'au prochain heading
+                paragraphs = []
+                for sibling in heading.find_next_siblings():
+                    if sibling.name in ['h1', 'h2', 'h3', 'h4', 'h5']:
+                        break
+                    if sibling.name in ['p', 'div']:
+                        paragraphs.append(sibling.get_text(separator=' ', strip=True))
+                if paragraphs:
+                    text = clean_abstract(' '.join(paragraphs))
+                    if len(text) > 100:
+                        candidates.append(text)
+        
+        # Stratégie 5: data-abstract attribute
+        for elem in soup.find_all(attrs={'data-abstract': True}):
+            text = clean_abstract(elem.get('data-abstract', ''))
+            if len(text) > 100:
+                candidates.append(text)
+        
+        # Choisir le meilleur candidat (le plus long qui est valide, sinon le plus long)
+        if candidates:
+            # Trier par longueur décroissante
+            candidates.sort(key=len, reverse=True)
+            
+            # Chercher d'abord un candidat valide
+            for candidate in candidates:
+                if is_valid_abstract(candidate):
+                    return {
+                        "doi": doi,
+                        "title": "Non disponible",
+                        "authors": "Non disponible",
+                        "abstract": candidate,
+                        "journal": "Non disponible",
+                        "year": "Non disponible",
+                        "keywords": "Non disponible",
+                        "success": True,
+                        "source": "DOI_Scraping"
+                    }
+            
+            # Sinon, retourner le plus long même s'il n'est pas "valide"
+            best = candidates[0]
+            if len(best) > 100:
+                return {
+                    "doi": doi,
+                    "title": "Non disponible",
+                    "authors": "Non disponible",
+                    "abstract": best,
+                    "journal": "Non disponible",
+                    "year": "Non disponible",
+                    "keywords": "Non disponible",
+                    "success": True,
+                    "source": "DOI_Scraping"
+                }
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+
+def merge_results(base: dict, supplement: dict, source_name: str) -> dict:
+    """
+    Fusionne deux résultats, en prenant les meilleures valeurs de chaque.
+    Priorité à l'abstract le plus long et le plus complet.
+    """
+    if not base:
+        return supplement
+    if not supplement:
+        return base
+    
+    result = base.copy()
+    
+    # Fusionner l'abstract - prendre le plus long/complet
+    base_abstract = base.get("abstract", "Non disponible")
+    supp_abstract = supplement.get("abstract", "Non disponible")
+    
+    if not is_valid_abstract(base_abstract) and is_valid_abstract(supp_abstract):
+        result["abstract"] = supp_abstract
+        result["source"] = f"{base.get('source', 'Unknown')}+{source_name}"
+    elif is_valid_abstract(base_abstract) and is_valid_abstract(supp_abstract):
+        # Prendre le plus long
+        if len(supp_abstract) > len(base_abstract):
+            result["abstract"] = supp_abstract
+            result["source"] = f"{base.get('source', 'Unknown')}+{source_name}"
+    
+    # Compléter les autres champs manquants
+    for field in ["title", "authors", "journal", "year", "keywords"]:
+        if result.get(field) in [None, "Non disponible", "Erreur", ""]:
+            supp_value = supplement.get(field)
+            if supp_value and supp_value not in [None, "Non disponible", "Erreur", ""]:
+                result[field] = supp_value
+    
+    return result
+
+
 def fetch_article_metadata(doi: str) -> dict:
     """
     Récupère les métadonnées d'un article en essayant plusieurs sources.
-    Ordre: OpenAlex -> Semantic Scholar -> CrossRef -> Unpaywall
+    Stratégie améliorée: essaie TOUTES les sources et fusionne les résultats
+    pour maximiser les chances d'obtenir un abstract complet.
+    
+    Ordre de priorité:
+    1. OpenAlex (index inversé, souvent complet)
+    2. Europe PMC (excellente source pour abstracts scientifiques)
+    3. Semantic Scholar (bonne couverture)
+    4. CrossRef (métadonnées officielles)
+    5. Unpaywall (métadonnées de base)
+    6. DOI Scraping (dernier recours)
     
     Args:
         doi: Le DOI de l'article (ex: "10.1145/3598301" ou "https://doi.org/10.1145/3598301")
@@ -273,37 +559,51 @@ def fetch_article_metadata(doi: str) -> dict:
     elif doi.startswith("http://doi.org/"):
         doi = doi.replace("http://doi.org/", "")
     
-    # Essayer OpenAlex d'abord (meilleur pour les abstracts)
-    result = fetch_from_openalex(doi)
-    sources_tried = ["OpenAlex"]
+    sources_tried = []
+    result = None
     
-    # Si OpenAlex n'a pas d'abstract, essayer Semantic Scholar
-    if result is None or result.get("abstract") == "Non disponible":
+    # Source 1: OpenAlex (meilleur pour les abstracts via index inversé)
+    openalex_result = fetch_from_openalex(doi)
+    sources_tried.append("OpenAlex")
+    if openalex_result:
+        result = openalex_result
+    
+    # Source 2: Europe PMC (excellente source pour abstracts complets)
+    if not is_valid_abstract(result.get("abstract") if result else None):
+        epmc_result = fetch_from_europe_pmc(doi)
+        sources_tried.append("EuropePMC")
+        if epmc_result:
+            result = merge_results(result, epmc_result, "EuropePMC")
+    
+    # Source 3: Semantic Scholar
+    if not is_valid_abstract(result.get("abstract") if result else None):
         ss_result = fetch_from_semantic_scholar(doi)
         sources_tried.append("SemanticScholar")
-        if ss_result and ss_result.get("abstract") != "Non disponible":
-            if result:
-                result["abstract"] = ss_result["abstract"]
-                result["source"] = "OpenAlex+SemanticScholar"
-            else:
-                result = ss_result
+        if ss_result:
+            result = merge_results(result, ss_result, "SemanticScholar")
     
-    # Si toujours pas d'abstract, essayer CrossRef
-    if result is None or result.get("abstract") == "Non disponible":
+    # Source 4: CrossRef (métadonnées officielles, parfois abstracts)
+    if not is_valid_abstract(result.get("abstract") if result else None):
         crossref_result = fetch_from_crossref(doi)
         sources_tried.append("CrossRef")
         if crossref_result:
-            if result and crossref_result.get("abstract") != "Non disponible":
-                result["abstract"] = crossref_result["abstract"]
-                result["source"] = f"{result.get('source', 'Unknown')}+CrossRef"
-            elif crossref_result and result is None:
-                result = crossref_result
+            result = merge_results(result, crossref_result, "CrossRef")
     
-    # Dernière tentative avec Unpaywall pour les métadonnées de base
+    # Source 5: Unpaywall (métadonnées de base, rarement abstracts)
     if result is None:
-        result = fetch_from_unpaywall(doi)
+        unpaywall_result = fetch_from_unpaywall(doi)
         sources_tried.append("Unpaywall")
+        if unpaywall_result:
+            result = unpaywall_result
     
+    # Source 6: DOI Scraping (dernier recours)
+    if not is_valid_abstract(result.get("abstract") if result else None):
+        scraping_result = fetch_from_doi_scraping(doi)
+        sources_tried.append("DOI_Scraping")
+        if scraping_result:
+            result = merge_results(result, scraping_result, "DOI_Scraping")
+    
+    # Si aucun résultat
     if result is None:
         return {
             "doi": doi,
@@ -317,7 +617,11 @@ def fetch_article_metadata(doi: str) -> dict:
             "error": "Impossible de récupérer les métadonnées depuis: " + ", ".join(sources_tried)
         }
     
+    # Marquer si l'abstract est valide ou non
+    result["abstract_valid"] = is_valid_abstract(result.get("abstract", ""))
+    result["abstract_length"] = len(result.get("abstract", ""))
     result["sources_tried"] = sources_tried
+    
     return result
 
 
