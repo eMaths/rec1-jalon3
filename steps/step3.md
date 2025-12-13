@@ -94,8 +94,17 @@ Ce fichier sert de **log de traçabilité**. Il doit suivre ce squelette :
 ## Résumé
 
 - **Total d'articles traités :** [nombre]
-- **Récupérations réussies :** [nombre]
-- **Échecs :** [nombre]
+- **Récupérations complètes :** [nombre]
+- **Récupérations partielles :** [nombre]
+- **Échecs complets :** [nombre]
+
+### Données manquantes
+
+| Donnée manquante | Nombre d'articles concernés |
+|------------------|----------------------------|
+| Titre manquant | [nombre] |
+| Abstract manquant | [nombre] |
+| Auteurs manquants | [nombre] |
 
 ---
 
