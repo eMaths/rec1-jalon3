@@ -1,18 +1,50 @@
 #!/usr/bin/env python3
 """
-Parser pour extraire les thèmes et concepts de analyse_problematique.md.
+Parser pour extraire les mots-clés de keywords.json.
 
-Ce fichier est généré par l'agent à l'étape 2 et suit un format structuré.
-Le parser extrait :
-- La problématique originale
-- La reformulation
-- Les concepts clés (verbes et noms)
-- Les thèmes primaires, secondaires et voisins
+Ce fichier est généré par l'agent à l'étape 2 et contient les mots-clés EN
+classés en trois catégories : primary, secondary, domain.
 """
 
 import re
+import json
 from typing import Dict, List, Tuple
 from pathlib import Path
+
+
+def parse_keywords_json(filepath: str) -> Dict:
+    """
+    Parse le fichier keywords.json et retourne les mots-clés structurés.
+    
+    Args:
+        filepath: Chemin vers le fichier keywords.json
+    
+    Returns:
+        {
+            "primary": ["keyword1", "keyword2", ...],
+            "secondary": ["keyword1", ...],
+            "domain": ["keyword1", ...],
+            "all_keywords": ["keyword1", ...]  # Tous les keywords pour matching rapide
+        }
+    """
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    result = {
+        "primary": data.get("primary", []),
+        "secondary": data.get("secondary", []),
+        "domain": data.get("domain", [])
+    }
+    
+    # Construire la liste de tous les keywords (lowercase pour matching)
+    all_keywords = []
+    for category in ["primary", "secondary", "domain"]:
+        for kw in result[category]:
+            all_keywords.append(kw.lower().strip())
+    
+    result["all_keywords"] = list(set(all_keywords))
+    
+    return result
 
 
 def parse_analyse_problematique(filepath: str) -> Dict:
@@ -27,14 +59,15 @@ def parse_analyse_problematique(filepath: str) -> Dict:
             "problematique": str,
             "reformulation": str,
             "concepts": {
-                "verbs": [...],
-                "nouns": [...]
+                "verbs": [{"fr": ..., "en": ...}, ...],
+                "nouns": [{"fr": ..., "en": ...}, ...]
             },
             "themes": {
-                "primary": [...],
+                "primary": [{"theme": ..., "keywords_en": [...], "justification": ...}, ...],
                 "secondary": [...],
                 "domain": [...]
             },
+            "keywords_en": [...]  # All English keywords for matching
             "synthese": str
         }
     """
@@ -77,18 +110,28 @@ def parse_analyse_problematique(filepath: str) -> Dict:
             result["reformulation"] = ' '.join(content_lines)
         
         # Section: Concepts clés extraits
-        elif 'concepts' in section.lower() and 'clés' in section.lower():
-            # Extraire les verbes
-            verbs_match = re.search(r'###\s*Verbes?\s*\n((?:[-*]\s*.+\n?)+)', section, re.IGNORECASE)
-            if verbs_match:
-                verbs_text = verbs_match.group(1)
-                result["concepts"]["verbs"] = extract_list_items(verbs_text)
+        elif 'concepts' in section.lower() and ('clés' in section.lower() or 'cles' in section.lower()):
+            # Extraire les verbes (format tableau FR/EN)
+            verbs_table = extract_concepts_table(section, 'verbes')
+            if verbs_table:
+                result["concepts"]["verbs"] = verbs_table
+            else:
+                # Fallback: ancien format liste
+                verbs_match = re.search(r'###\s*Verbes?\s*\n((?:[-*]\s*.+\n?)+)', section, re.IGNORECASE)
+                if verbs_match:
+                    verbs_text = verbs_match.group(1)
+                    result["concepts"]["verbs"] = [{"fr": v, "en": v} for v in extract_list_items(verbs_text)]
             
-            # Extraire les noms/expressions
-            nouns_match = re.search(r'###\s*(?:Noms?|Expressions?|Noms?\s*/\s*Expressions?)\s*\n((?:[-*]\s*.+\n?)+)', section, re.IGNORECASE)
-            if nouns_match:
-                nouns_text = nouns_match.group(1)
-                result["concepts"]["nouns"] = extract_list_items(nouns_text)
+            # Extraire les noms/expressions (format tableau FR/EN)
+            nouns_table = extract_concepts_table(section, 'noms')
+            if nouns_table:
+                result["concepts"]["nouns"] = nouns_table
+            else:
+                # Fallback: ancien format liste
+                nouns_match = re.search(r'###\s*(?:Noms?|Expressions?|Noms?\s*/\s*Expressions?)\s*\n((?:[-*]\s*.+\n?)+)', section, re.IGNORECASE)
+                if nouns_match:
+                    nouns_text = nouns_match.group(1)
+                    result["concepts"]["nouns"] = [{"fr": n, "en": n} for n in extract_list_items(nouns_text)]
         
         # Section: Thèmes primaires
         elif 'thèmes primaires' in section.lower() or 'themes primaires' in section.lower():
@@ -108,6 +151,9 @@ def parse_analyse_problematique(filepath: str) -> Dict:
             content_lines = [l.strip() for l in lines[1:] if l.strip() and not l.startswith('#')]
             result["synthese"] = ' '.join(content_lines)
     
+    # Construire la liste de tous les keywords EN pour le matching
+    result["keywords_en"] = collect_all_english_keywords(result)
+    
     return result
 
 
@@ -125,60 +171,152 @@ def extract_list_items(text: str) -> List[str]:
     return items
 
 
-def extract_themes_from_table(section: str) -> List[str]:
+def extract_concepts_table(section: str, concept_type: str) -> List[Dict]:
     """
-    Extrait les thèmes d'un tableau markdown.
-    Format attendu: | Rang | Thème | Justification |
+    Extrait les concepts d'un tableau markdown FR/EN.
+    Format attendu: | Français | English |
     """
-    themes = []
+    concepts = []
     
-    # Chercher les lignes du tableau
-    lines = section.split('\n')
+    # Chercher la sous-section appropriée
+    if concept_type.lower() == 'verbes':
+        pattern = r'###\s*Verbes?\s*\n'
+    else:
+        pattern = r'###\s*(?:Noms?|Expressions?|Noms?\s*/\s*Expressions?)\s*\n'
+    
+    match = re.search(pattern, section, re.IGNORECASE)
+    if not match:
+        return []
+    
+    # Extraire le contenu après le header
+    start_pos = match.end()
+    # Trouver la fin (prochain ### ou fin de section)
+    end_match = re.search(r'\n###', section[start_pos:])
+    if end_match:
+        subsection = section[start_pos:start_pos + end_match.start()]
+    else:
+        subsection = section[start_pos:]
+    
+    lines = subsection.split('\n')
     in_table = False
     
     for line in lines:
         line = line.strip()
         
         # Détecter le début du tableau
-        if '|' in line and ('rang' in line.lower() or 'thème' in line.lower() or 'theme' in line.lower()):
+        if '|' in line and ('français' in line.lower() or 'french' in line.lower() or 'english' in line.lower()):
             in_table = True
             continue
         
-        # Ignorer la ligne de séparation (|---|---|---|)
+        # Ignorer la ligne de séparation
         if in_table and re.match(r'^\|[\s\-:|]+\|$', line):
             continue
         
-        # Extraire les données du tableau
+        # Extraire les données
         if in_table and '|' in line:
             cells = [c.strip() for c in line.split('|')]
-            # Filtrer les cellules vides
             cells = [c for c in cells if c]
             
-            if len(cells) >= 2:
-                # La deuxième colonne contient le thème
-                theme = cells[1] if len(cells) > 1 else cells[0]
-                # Ignorer si c'est juste un numéro ou vide
-                if theme and not theme.isdigit() and theme != '...':
-                    themes.append(theme)
+            if len(cells) >= 2 and cells[0] != '...':
+                concepts.append({
+                    "fr": cells[0],
+                    "en": cells[1]
+                })
+    
+    return concepts
+
+
+def extract_themes_from_table(section: str) -> List[Dict]:
+    """
+    Extrait les thèmes d'un tableau markdown.
+    Format attendu: | Rang | Thème | Keywords (EN) | Justification |
+    Ou ancien format: | Rang | Thème | Justification |
+    """
+    themes = []
+    
+    lines = section.split('\n')
+    in_table = False
+    has_keywords_column = False
+    
+    for line in lines:
+        line = line.strip()
+        
+        # Détecter le début du tableau et vérifier si colonne Keywords existe
+        if '|' in line and ('rang' in line.lower() or 'thème' in line.lower() or 'theme' in line.lower()):
+            in_table = True
+            has_keywords_column = 'keyword' in line.lower()
+            continue
+        
+        # Ignorer la ligne de séparation
+        if in_table and re.match(r'^\|[\s\-:|]+\|$', line):
+            continue
+        
+        # Extraire les données
+        if in_table and '|' in line:
+            cells = [c.strip() for c in line.split('|')]
+            cells = [c for c in cells if c]
+            
+            if len(cells) >= 2 and cells[0] != '...' and not cells[1].isdigit():
+                theme_data = {
+                    "theme": cells[1] if len(cells) > 1 else cells[0],
+                    "keywords_en": [],
+                    "justification": ""
+                }
+                
+                if has_keywords_column and len(cells) >= 3:
+                    # Nouveau format avec Keywords (EN)
+                    keywords_str = cells[2] if len(cells) > 2 else ""
+                    theme_data["keywords_en"] = [k.strip() for k in keywords_str.split(',') if k.strip() and k.strip() != '...']
+                    theme_data["justification"] = cells[3] if len(cells) > 3 else ""
+                elif len(cells) >= 3:
+                    # Ancien format sans Keywords
+                    theme_data["justification"] = cells[2]
+                
+                if theme_data["theme"] and theme_data["theme"] != '...':
+                    themes.append(theme_data)
     
     return themes
+
+
+def collect_all_english_keywords(parsed: Dict) -> List[str]:
+    """
+    Collecte tous les mots-clés anglais pour le matching avec les articles.
+    """
+    keywords = []
+    
+    # Ajouter les keywords EN des thèmes
+    for category in ["primary", "secondary", "domain"]:
+        for theme in parsed["themes"].get(category, []):
+            if isinstance(theme, dict):
+                keywords.extend(theme.get("keywords_en", []))
+            else:
+                # Ancien format: le thème lui-même
+                keywords.append(theme)
+    
+    # Ajouter les concepts EN
+    for concept in parsed["concepts"].get("verbs", []):
+        if isinstance(concept, dict):
+            keywords.append(concept.get("en", ""))
+        else:
+            keywords.append(concept)
+    
+    for concept in parsed["concepts"].get("nouns", []):
+        if isinstance(concept, dict):
+            keywords.append(concept.get("en", ""))
+        else:
+            keywords.append(concept)
+    
+    # Nettoyer et dédupliquer
+    keywords = [k.lower().strip() for k in keywords if k]
+    return list(set(keywords))
 
 
 def get_all_keywords(parsed: Dict) -> List[str]:
     """
     Retourne tous les mots-clés extraits (thèmes + concepts) pour la recherche.
+    Utilise les keywords EN si disponibles.
     """
-    keywords = []
-    
-    # Ajouter les thèmes
-    for category in ["primary", "secondary", "domain"]:
-        keywords.extend(parsed["themes"].get(category, []))
-    
-    # Ajouter les concepts
-    keywords.extend(parsed["concepts"].get("verbs", []))
-    keywords.extend(parsed["concepts"].get("nouns", []))
-    
-    return keywords
+    return parsed.get("keywords_en", [])
 
 
 if __name__ == "__main__":

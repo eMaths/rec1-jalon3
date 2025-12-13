@@ -4,57 +4,67 @@
 
 Analyser chaque article récupéré à l'étape 3 pour déterminer sa **pertinence par rapport à la problématique**.
 
+Cette étape se fait en **deux phases** :
+1. **Phase A (automatique)** — Pré-filtrage par mots-clés via un script
+2. **Phase B (manuelle)** — Validation sémantique par l'agent IA
+
 **Fichiers d'entrée :**
 - `../results/articles_fetched.md` — Métadonnées des articles (étape 3)
-- `../results/analyse_problematique.md` — Thèmes de référence (étape 2)
+- `../results/keywords.json` — Mots-clés de référence (étape 2)
 
-**Fichier de sortie :**
-- `../results/first_analysis.md` — Analyse de pertinence de chaque article
+**Fichiers de sortie :**
+- `../results/candidates.md` — Candidats pré-filtrés (Phase A)
+- `../results/final_selection.md` — Sélection finale validée (Phase B)
 
 ---
 
-## 2. Commande à exécuter
+## 2. Phase A : Pré-filtrage automatique
+
+### Commande à exécuter
 
 ```bash
 python3 ../tools/analyze_articles/analyze_all.py
 ```
 
-Le script analyse automatiquement chaque article en se basant sur :
-- Les **thèmes** extraits de `analyse_problematique.md` (primaires, secondaires, voisins)
-- Les **concepts clés** (verbes et noms) identifiés à l'étape 2
+Le script génère `../results/candidates.md` avec :
+- Les articles dont le titre ou l'abstract contient des mots-clés de `keywords.json`
+- Une catégorie **provisoire** (A, B ou C) basée sur les mots-clés trouvés
+
+⚠️ **IMPORTANT** : Cette liste contient des **faux positifs**. Le script ne peut pas distinguer :
+- Un article qui **étudie** le sujet (pertinent)
+- Un article qui **utilise** le sujet comme outil (non pertinent)
+
+→ La Phase B est **obligatoire** pour corriger ces erreurs.
 
 ---
 
-## 3. Processus d'analyse (appliqué par le script)
+## 3. Phase B : Validation sémantique par l'agent IA
 
-Pour **chaque article**, le script applique le processus suivant :
+Pour **chaque article candidat**, tu dois :
 
-### Étape 1 — Analyse du titre
+### Étape 1 — Lire le titre et l'abstract
 
-1. Lis le titre de l'article
-2. Compare-le aux thèmes identifiés à l'étape 2
+Lis attentivement le contenu, pas seulement les mots-clés.
 
-| Résultat | Action |
-|----------|--------|
-| Le titre indique clairement que l'article est **hors sujet** | → Rejeter l'article (Selection = `non pertinent`, Justification = `Titre hors sujet`) |
-| Le titre suggère un **lien possible** avec la problématique ou le thème de la problématique | → Passer à l'analyse de l'abstract |
+### Étape 2 — Appliquer le Principe 1 (critique)
 
-### Étape 2 — Analyse de l'abstract
+**Question clé** : L'article **étudie-t-il** le sujet de la problématique, ou **utilise-t-il** ce sujet comme outil pour autre chose ?
 
-1. Lis l'abstract de l'article
-2. Identifie les thèmes abordés et compare-les à ceux de l'étape 2
+| Réponse | Décision |
+|---------|----------|
+| L'article **étudie, analyse ou améliore** le sujet de la problématique | ✅ Conserver (valider la catégorie A, B ou C) |
+| L'article **utilise** le sujet comme outil pour résoudre un autre problème | ❌ Rejeter (marquer comme "faux positif") |
 
-| Résultat | Action |
-|----------|--------|
-| L'abstract confirme que l'article est **hors sujet** | → Rejeter l'article (Selection = `non pertinent`, Justification = `Abstract hors sujet`) |
-| L'abstract confirme une **pertinence potentielle** selon les thèmes identifiés à l'étape 2 dans le fichier `../results/analyse_problematique.md` | → Accepter l'article (Selection = `pertinent`, Justification = `Prêt pour analyse approfondie`) |
+### Étape 3 — Valider ou corriger la catégorie
 
-### Étape 3 — Classification par catégorie
+Si l'article est pertinent, vérifie que la catégorie est correcte :
+- **A** — Répond directement à la problématique
+- **B** — Contribue indirectement (méthode, métrique, approche réutilisable)
+- **C** — Même domaine, potentiellement utile
 
-Pour les articles retenus, indique à quelle catégorie de thèmes ils correspondent :
-- **A. Thème primaire** — Lien direct avec la problématique
-- **B. Thème secondaire** — Lien indirect, peut contribuer à la réponse
-- **C. Thème voisin** — Même domaine, mais ne répond pas directement à la problématique
+### Étape 4 — Justifier ta décision
+
+Pour chaque article, écris une justification **sémantique** (pas juste "contient le mot X").
 
 ---
 
@@ -126,59 +136,61 @@ Un article est **hors sujet** uniquement s'il :
 
 ---
 
-## 6. Format du fichier de sortie
+## 6. Format des fichiers de sortie
 
-Le fichier `../results/first_analysis.md` doit suivre **exactement** ce squelette :
+### 6.1 Fichier `candidates.md` (généré par le script)
+
+Ce fichier est généré automatiquement par le script. Ne pas le modifier.
+
+### 6.2 Fichier `final_selection.md` (généré par l'agent IA)
+
+Le fichier `../results/final_selection.md` doit suivre **exactement** ce squelette :
 
 ```markdown
-# Analyse de pertinence des articles
+# Sélection finale des articles
 
 ## Résumé
 
-- **Total d'articles analysés :** [nombre]
-- **Articles retenus (pertinents) :** [nombre]
-- **Articles rejetés (non pertinents) :** [nombre]
+- **Candidats analysés :** [nombre]
+- **Articles retenus :** [nombre]
+- **Faux positifs rejetés :** [nombre]
 
-### Répartition des articles retenus par catégorie
+### Répartition par catégorie
 
 | Catégorie | Nombre |
 |-----------|--------|
-| A. Thèmes primaires | [nombre] |
-| B. Thèmes secondaires | [nombre] |
-| C. Thèmes voisins | [nombre] |
+| A. Lien direct | [nombre] |
+| B. Lien indirect | [nombre] |
+| C. Même domaine | [nombre] |
 
 ---
 
-## Articles analysés
+## Articles retenus
 
-### Article 1 : [Titre de l'article]
+### Article 1 : [Titre]
 
-- **Auteurs :** [liste des auteurs]
 - **DOI :** [doi]
-- **Lien :** [https://doi.org/doi]
-
-#### Abstract
-
-> [Résumé de l'article]
-
-#### Thèmes identifiés (par ordre de prédominance)
-
-1. [thème principal]
-2. [thème secondaire]
-3. [...]
-
-#### Décision
-
-- **Selection :** pertinent / non pertinent
-- **Catégorie :** A / B / C (si pertinent)
-- **Justification :**
-  - [argument 1]
-  - [argument 2]
-  - [...]
+- **Catégorie :** A / B / C
+- **Justification sémantique :** [Explication de pourquoi cet article ÉTUDIE le sujet et non l'utilise comme outil]
 
 ---
 
 ### Article 2 : [Titre]
+[...]
+
+---
+
+## Faux positifs rejetés
+
+### [Titre de l'article rejeté]
+
+- **DOI :** [doi]
+- **Catégorie initiale :** A / B / C (attribuée par le script)
+- **Raison du rejet :** [Explication de pourquoi cet article UTILISE le sujet comme outil sans l'étudier]
+
+---
+
+### [Autre article rejeté]
 [...]
 ```
 
@@ -187,10 +199,10 @@ Le fichier `../results/first_analysis.md` doit suivre **exactement** ce squelett
 ## 7. Validation
 
 Avant de passer à l'étape suivante, vérifie que :
-- [ ] Le fichier `../results/first_analysis.md` existe
-- [ ] Chaque article a été analysé (titre + abstract)
-- [ ] Chaque décision est justifiée
-- [ ] Les articles retenus sont classés par catégorie (A, B ou C)
-- [ ] Le résumé en début de fichier est à jour
+- [ ] Le fichier `../results/candidates.md` existe (Phase A)
+- [ ] Le fichier `../results/final_selection.md` existe (Phase B)
+- [ ] Chaque candidat a été relu et validé/rejeté
+- [ ] Les faux positifs sont listés avec une justification
+- [ ] Les articles retenus ont une justification sémantique (pas juste des mots-clés)
 
 **Si tout est validé** → Passe à l'étape suivante : `./step5.md`

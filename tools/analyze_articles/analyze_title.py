@@ -1,140 +1,101 @@
 #!/usr/bin/env python3
 """
-Analyse du titre d'un article par rapport aux thèmes extraits de analyse_problematique.md.
+Analyse du titre d'un article par rapport aux keywords extraits de keywords.json.
 
 Règles (basées sur step4.md) :
-- Si le titre indique CLAIREMENT que l'article est hors sujet → rejeter
-- Si le titre suggère un lien POSSIBLE avec la problématique → passer à l'abstract
-
-Principe clé : Distinguer "étudier le sujet" vs "utiliser le sujet comme outil"
+- Si le titre contient des keywords → passer à l'abstract
+- On ne rejette JAMAIS sur le titre seul (principe d'inclusivité)
 """
 
-import re
 from typing import Dict, List
 
 
-def analyze_title(title: str, themes: Dict[str, List[str]], concepts: Dict[str, List[str]]) -> Dict:
+def analyze_title(title: str, keywords: Dict) -> Dict:
     """
-    Analyse le titre d'un article par rapport aux thèmes extraits.
+    Analyse le titre d'un article par rapport aux keywords.
     
     Args:
         title: Le titre de l'article
-        themes: Dict avec clés "primary", "secondary", "domain" contenant les thèmes
-        concepts: Dict avec clés "verbs", "nouns" contenant les concepts clés
+        keywords: Dict avec clés "primary", "secondary", "domain", "all_keywords"
     
     Returns:
         {
-            "decision": "continue" | "reject",
+            "decision": "continue" (toujours, on ne rejette pas sur le titre),
             "confidence": float (0-1),
-            "matched_themes": {"primary": [...], "secondary": [...], "domain": [...]},
-            "matched_concepts": [...],
+            "matched_by_category": {"primary": [...], "secondary": [...], "domain": [...]},
+            "matched_keywords": [...],
             "reason": str
         }
     """
     title_lower = title.lower()
     
-    matched_themes = {
+    matched_by_category = {
         "primary": [],
         "secondary": [],
         "domain": []
     }
-    matched_concepts = []
+    matched_keywords = []
     
-    # Chercher les correspondances avec les thèmes
+    # Chercher les correspondances par catégorie
     for category in ["primary", "secondary", "domain"]:
-        for theme in themes.get(category, []):
-            # Chercher le thème ou ses mots individuels
-            theme_lower = theme.lower()
-            theme_words = [w for w in theme_lower.split() if len(w) > 3]
-            
-            # Match exact du thème
-            if theme_lower in title_lower:
-                matched_themes[category].append(theme)
-            # Match partiel (au moins 2 mots du thème)
-            elif len(theme_words) >= 2:
-                matches = sum(1 for w in theme_words if w in title_lower)
-                if matches >= 2 or (matches >= 1 and len(theme_words) == 1):
-                    matched_themes[category].append(theme)
-            # Match d'un mot significatif
-            elif len(theme_words) == 1 and theme_words[0] in title_lower:
-                matched_themes[category].append(theme)
-    
-    # Chercher les correspondances avec les concepts (verbes et noms)
-    all_concepts = concepts.get("verbs", []) + concepts.get("nouns", [])
-    for concept in all_concepts:
-        concept_lower = concept.lower()
-        if len(concept_lower) > 3 and concept_lower in title_lower:
-            matched_concepts.append(concept)
+        for keyword in keywords.get(category, []):
+            keyword_lower = keyword.lower().strip()
+            if len(keyword_lower) > 2 and keyword_lower in title_lower:
+                matched_by_category[category].append(keyword)
+                if keyword_lower not in matched_keywords:
+                    matched_keywords.append(keyword_lower)
     
     # Calculer les scores
-    primary_score = len(matched_themes["primary"])
-    secondary_score = len(matched_themes["secondary"])
-    domain_score = len(matched_themes["domain"])
-    concept_score = len(matched_concepts)
+    primary_score = len(matched_by_category["primary"])
+    secondary_score = len(matched_by_category["secondary"])
+    domain_score = len(matched_by_category["domain"])
     
-    # Logique de décision
+    # Logique de décision - on ne rejette JAMAIS sur le titre seul
     
-    # Règle 1: Thèmes primaires trouvés → très probablement pertinent
     if primary_score >= 1:
         return {
             "decision": "continue",
             "confidence": 0.9,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"Titre correspond à {primary_score} thème(s) primaire(s): {matched_themes['primary']}"
+            "matched_by_category": matched_by_category,
+            "matched_keywords": matched_keywords,
+            "reason": f"Titre contient {primary_score} keyword(s) primaire(s): {matched_by_category['primary']}"
         }
     
-    # Règle 2: Thèmes secondaires trouvés → probablement pertinent
     if secondary_score >= 1:
         return {
             "decision": "continue",
             "confidence": 0.7,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"Titre correspond à {secondary_score} thème(s) secondaire(s): {matched_themes['secondary']}"
+            "matched_by_category": matched_by_category,
+            "matched_keywords": matched_keywords,
+            "reason": f"Titre contient {secondary_score} keyword(s) secondaire(s): {matched_by_category['secondary']}"
         }
     
-    # Règle 3: Thèmes du domaine trouvés → à vérifier avec l'abstract
     if domain_score >= 1:
         return {
             "decision": "continue",
             "confidence": 0.5,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"Titre dans le même domaine: {matched_themes['domain']}"
+            "matched_by_category": matched_by_category,
+            "matched_keywords": matched_keywords,
+            "reason": f"Titre contient {domain_score} keyword(s) du domaine: {matched_by_category['domain']}"
         }
     
-    # Règle 4: Concepts clés trouvés → à vérifier avec l'abstract
-    if concept_score >= 2:
-        return {
-            "decision": "continue",
-            "confidence": 0.5,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"Titre contient {concept_score} concepts clés: {matched_concepts}"
-        }
-    
-    # Règle 5: Aucune correspondance → continuer quand même (être inclusif)
-    # On ne rejette PAS sur le titre seul (principe d'inclusivité du step4)
+    # Aucune correspondance → continuer quand même (être inclusif)
     return {
         "decision": "continue",
         "confidence": 0.3,
-        "matched_themes": matched_themes,
-        "matched_concepts": matched_concepts,
-        "reason": "Aucune correspondance directe, vérification de l'abstract nécessaire"
+        "matched_by_category": matched_by_category,
+        "matched_keywords": matched_keywords,
+        "reason": "Aucune correspondance dans le titre, vérification de l'abstract nécessaire"
     }
 
 
 if __name__ == "__main__":
-    # Test avec des thèmes simulés
-    themes = {
-        "primary": ["efficacité énergétique", "consommation d'énergie", "Green AI"],
-        "secondary": ["optimisation de modèles", "compression", "benchmark"],
-        "domain": ["machine learning", "deep learning", "cloud computing"]
-    }
-    concepts = {
-        "verbs": ["réduire", "optimiser", "évaluer", "concevoir"],
-        "nouns": ["énergie", "performance", "modèle", "apprentissage"]
+    # Test avec des keywords simulés
+    keywords = {
+        "primary": ["energy efficiency", "energy-efficient", "energy consumption", "green AI"],
+        "secondary": ["model compression", "pruning", "quantization"],
+        "domain": ["machine learning", "deep learning", "cloud computing"],
+        "all_keywords": []
     }
     
     test_titles = [
@@ -144,7 +105,8 @@ if __name__ == "__main__":
     ]
     
     for title in test_titles:
-        result = analyze_title(title, themes, concepts)
+        result = analyze_title(title, keywords)
         print(f"\n📄 {title[:60]}...")
         print(f"   Decision: {result['decision']} (confidence: {result['confidence']})")
+        print(f"   Matched: {result['matched_keywords']}")
         print(f"   Reason: {result['reason']}")

@@ -1,30 +1,28 @@
 #!/usr/bin/env python3
 """
-Analyse de l'abstract d'un article par rapport aux thèmes extraits de analyse_problematique.md.
+Analyse de l'abstract d'un article par rapport aux keywords extraits de keywords.json.
 
 Règles (basées sur step4.md) :
-- Si l'abstract confirme que l'article est hors sujet → rejeter
-- Si l'abstract confirme une pertinence potentielle → accepter
+- Si l'abstract contient des keywords primaires → Catégorie A
+- Si l'abstract contient des keywords secondaires → Catégorie B
+- Si l'abstract contient des keywords du domaine → Catégorie C
+- Sinon → rejeter
 
 Principes clés :
-1. Distinguer "étudier le sujet" vs "utiliser le sujet comme outil"
-2. Être inclusif : en cas de doute, préférer garder l'article
-3. Ne rejeter que les articles CLAIREMENT hors domaine
+1. Être inclusif : en cas de doute, préférer garder l'article
+2. Ne rejeter que les articles CLAIREMENT hors domaine
 """
 
-import re
 from typing import Dict, List
 
 
-def analyze_abstract(abstract: str, themes: Dict[str, List[str]], concepts: Dict[str, List[str]], 
-                     title_analysis: Dict = None) -> Dict:
+def analyze_abstract(abstract: str, keywords: Dict, title_analysis: Dict = None) -> Dict:
     """
-    Analyse l'abstract d'un article par rapport aux thèmes extraits.
+    Analyse l'abstract d'un article par rapport aux keywords.
     
     Args:
         abstract: Le résumé de l'article
-        themes: Dict avec clés "primary", "secondary", "domain" contenant les thèmes
-        concepts: Dict avec clés "verbs", "nouns" contenant les concepts clés
+        keywords: Dict avec clés "primary", "secondary", "domain", "all_keywords"
         title_analysis: Résultat de l'analyse du titre (optionnel)
     
     Returns:
@@ -32,166 +30,125 @@ def analyze_abstract(abstract: str, themes: Dict[str, List[str]], concepts: Dict
             "decision": "accept" | "reject",
             "category": "A" | "B" | "C" | None,
             "confidence": float (0-1),
-            "matched_themes": {"primary": [...], "secondary": [...], "domain": [...]},
-            "matched_concepts": [...],
-            "reason": str,
-            "themes_identified": [...]
+            "matched_by_category": {"primary": [...], "secondary": [...], "domain": [...]},
+            "matched_keywords": [...],
+            "reason": str
         }
     """
     # Cas spécial: abstract non disponible
     if not abstract or abstract == "Non disponible" or len(abstract) < 50:
+        # Si le titre avait des correspondances, on garde l'article
+        if title_analysis and title_analysis.get("matched_keywords"):
+            return {
+                "decision": "accept",
+                "category": "C",
+                "confidence": 0.4,
+                "matched_by_category": title_analysis.get("matched_by_category", {}),
+                "matched_keywords": title_analysis.get("matched_keywords", []),
+                "reason": "Abstract non disponible, mais le titre contient des keywords pertinents"
+            }
         return {
             "decision": "accept",
             "category": "C",
             "confidence": 0.3,
-            "matched_themes": {"primary": [], "secondary": [], "domain": []},
-            "matched_concepts": [],
-            "reason": "Abstract non disponible ou trop court, conservé par prudence",
-            "themes_identified": ["Données insuffisantes"]
+            "matched_by_category": {"primary": [], "secondary": [], "domain": []},
+            "matched_keywords": [],
+            "reason": "Abstract non disponible ou trop court, conservé par prudence"
         }
     
     abstract_lower = abstract.lower()
     
-    matched_themes = {
+    matched_by_category = {
         "primary": [],
         "secondary": [],
         "domain": []
     }
-    matched_concepts = []
-    themes_identified = []
+    matched_keywords = []
     
-    # Chercher les correspondances avec les thèmes
+    # Chercher les correspondances par catégorie
     for category in ["primary", "secondary", "domain"]:
-        for theme in themes.get(category, []):
-            theme_lower = theme.lower()
-            theme_words = [w for w in theme_lower.split() if len(w) > 3]
-            
-            # Match exact du thème
-            if theme_lower in abstract_lower:
-                matched_themes[category].append(theme)
-                if theme not in themes_identified:
-                    themes_identified.append(theme)
-            # Match partiel (mots significatifs du thème)
-            elif theme_words:
-                matches = sum(1 for w in theme_words if w in abstract_lower)
-                # Si plus de la moitié des mots sont présents
-                if matches >= len(theme_words) / 2 and matches >= 1:
-                    matched_themes[category].append(theme)
-                    if theme not in themes_identified:
-                        themes_identified.append(theme)
+        for keyword in keywords.get(category, []):
+            keyword_lower = keyword.lower().strip()
+            if len(keyword_lower) > 2 and keyword_lower in abstract_lower:
+                matched_by_category[category].append(keyword)
+                if keyword_lower not in matched_keywords:
+                    matched_keywords.append(keyword_lower)
     
-    # Chercher les correspondances avec les concepts
-    all_concepts = concepts.get("verbs", []) + concepts.get("nouns", [])
-    for concept in all_concepts:
-        concept_lower = concept.lower()
-        if len(concept_lower) > 3 and concept_lower in abstract_lower:
-            matched_concepts.append(concept)
+    # Ajouter les correspondances du titre si disponibles
+    if title_analysis:
+        for kw in title_analysis.get("matched_keywords", []):
+            if kw not in matched_keywords:
+                matched_keywords.append(kw)
     
     # Calculer les scores
-    primary_score = len(matched_themes["primary"])
-    secondary_score = len(matched_themes["secondary"])
-    domain_score = len(matched_themes["domain"])
-    concept_score = len(matched_concepts)
-    
-    if not themes_identified:
-        themes_identified = ["Aucun thème identifié"]
+    primary_score = len(matched_by_category["primary"])
+    secondary_score = len(matched_by_category["secondary"])
+    domain_score = len(matched_by_category["domain"])
     
     # Logique de décision basée sur step4.md
     
-    # Cas 1: Thèmes primaires trouvés → Catégorie A
-    if primary_score >= 2:
+    # Cas 1: Keywords primaires trouvés → Catégorie A
+    if primary_score >= 1:
         return {
             "decision": "accept",
             "category": "A",
-            "confidence": 0.9,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"L'abstract correspond à {primary_score} thème(s) primaire(s): {matched_themes['primary']}",
-            "themes_identified": themes_identified
+            "confidence": 0.9 if primary_score >= 2 else 0.8,
+            "matched_by_category": matched_by_category,
+            "matched_keywords": matched_keywords,
+            "reason": f"Abstract contient {primary_score} keyword(s) primaire(s): {matched_by_category['primary']}"
         }
     
-    if primary_score == 1:
-        return {
-            "decision": "accept",
-            "category": "A",
-            "confidence": 0.8,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"L'abstract correspond au thème primaire: {matched_themes['primary']}",
-            "themes_identified": themes_identified
-        }
-    
-    # Cas 2: Thèmes secondaires trouvés → Catégorie B
+    # Cas 2: Keywords secondaires trouvés → Catégorie B
     if secondary_score >= 1:
         return {
             "decision": "accept",
             "category": "B",
             "confidence": 0.7,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"L'abstract correspond à {secondary_score} thème(s) secondaire(s): {matched_themes['secondary']}",
-            "themes_identified": themes_identified
+            "matched_by_category": matched_by_category,
+            "matched_keywords": matched_keywords,
+            "reason": f"Abstract contient {secondary_score} keyword(s) secondaire(s): {matched_by_category['secondary']}"
         }
     
-    # Cas 3: Thèmes du domaine trouvés → Catégorie C
+    # Cas 3: Keywords du domaine trouvés → Catégorie C
     if domain_score >= 1:
         return {
             "decision": "accept",
             "category": "C",
             "confidence": 0.5,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"L'abstract est dans le même domaine: {matched_themes['domain']}",
-            "themes_identified": themes_identified
+            "matched_by_category": matched_by_category,
+            "matched_keywords": matched_keywords,
+            "reason": f"Abstract contient {domain_score} keyword(s) du domaine: {matched_by_category['domain']}"
         }
     
-    # Cas 4: Concepts clés trouvés mais pas de thèmes → Catégorie C avec prudence
-    if concept_score >= 3:
-        return {
-            "decision": "accept",
-            "category": "C",
-            "confidence": 0.4,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": f"L'abstract contient {concept_score} concepts clés: {matched_concepts[:5]}",
-            "themes_identified": themes_identified
-        }
-    
-    # Cas 5: Aucune correspondance significative
-    # Principe d'inclusivité : on garde quand même en C si le titre était prometteur
+    # Cas 4: Aucune correspondance dans l'abstract mais le titre était prometteur
     if title_analysis and title_analysis.get("confidence", 0) >= 0.5:
         return {
             "decision": "accept",
             "category": "C",
-            "confidence": 0.3,
-            "matched_themes": matched_themes,
-            "matched_concepts": matched_concepts,
-            "reason": "Aucune correspondance dans l'abstract, mais le titre suggérait un lien possible",
-            "themes_identified": themes_identified
+            "confidence": 0.4,
+            "matched_by_category": matched_by_category,
+            "matched_keywords": matched_keywords,
+            "reason": "Aucune correspondance dans l'abstract, mais le titre contient des keywords pertinents"
         }
     
-    # Cas 6: Vraiment aucun lien → Rejeter
+    # Cas 5: Vraiment aucun lien → Rejeter
     return {
         "decision": "reject",
         "category": None,
         "confidence": 0.6,
-        "matched_themes": matched_themes,
-        "matched_concepts": matched_concepts,
-        "reason": "Aucune correspondance avec les thèmes ou concepts de la problématique",
-        "themes_identified": themes_identified
+        "matched_by_category": matched_by_category,
+        "matched_keywords": matched_keywords,
+        "reason": "Aucune correspondance avec les keywords de la problématique"
     }
 
 
 if __name__ == "__main__":
-    # Test avec des thèmes simulés
-    themes = {
-        "primary": ["efficacité énergétique", "consommation d'énergie", "Green AI"],
-        "secondary": ["optimisation de modèles", "compression", "benchmark"],
-        "domain": ["machine learning", "deep learning", "cloud computing"]
-    }
-    concepts = {
-        "verbs": ["réduire", "optimiser", "évaluer", "concevoir"],
-        "nouns": ["énergie", "performance", "modèle", "apprentissage"]
+    # Test avec des keywords simulés
+    keywords = {
+        "primary": ["energy efficiency", "energy-efficient", "energy consumption", "green AI"],
+        "secondary": ["model compression", "pruning", "quantization"],
+        "domain": ["machine learning", "deep learning", "cloud computing"],
+        "all_keywords": []
     }
     
     test_abstracts = [
@@ -201,8 +158,8 @@ if __name__ == "__main__":
     ]
     
     for abstract in test_abstracts:
-        result = analyze_abstract(abstract, themes, concepts)
+        result = analyze_abstract(abstract, keywords)
         print(f"\n📄 {abstract[:70]}...")
         print(f"   Decision: {result['decision']} | Category: {result['category']}")
-        print(f"   Themes: {result['themes_identified']}")
+        print(f"   Matched: {result['matched_keywords']}")
         print(f"   Reason: {result['reason']}")

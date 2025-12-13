@@ -6,7 +6,7 @@ Usage:
     python3 analyze_all.py
 
 Fichiers d'entrée (générés aux étapes précédentes):
-    - ../results/analyse_problematique.md (étape 2)
+    - ../results/keywords.json (étape 2)
     - ../results/articles_fetched.md (étape 3)
 
 Fichier de sortie:
@@ -23,7 +23,7 @@ from typing import Dict, List
 # Ajouter le dossier courant au path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from parse_problematique import parse_analyse_problematique
+from parse_problematique import parse_keywords_json
 from analyze_title import analyze_title
 from analyze_abstract import analyze_abstract
 
@@ -90,15 +90,19 @@ def parse_articles_fetched(filepath: str) -> List[Dict]:
     return articles
 
 
-def analyze_article(article: Dict, themes: Dict, concepts: Dict) -> Dict:
+def analyze_article(article: Dict, keywords: Dict) -> Dict:
     """
     Analyse un article complet (titre + abstract).
+    
+    Args:
+        article: Dict avec title, abstract, etc.
+        keywords: Dict avec primary, secondary, domain, all_keywords
     """
     title = article.get("title", "")
     abstract = article.get("abstract", "")
     
     # Étape 1: Analyse du titre
-    title_result = analyze_title(title, themes, concepts)
+    title_result = analyze_title(title, keywords)
     
     # Étape 2: Analyse de l'abstract (si le titre n'a pas été rejeté)
     if title_result["decision"] == "reject":
@@ -109,11 +113,11 @@ def analyze_article(article: Dict, themes: Dict, concepts: Dict) -> Dict:
             "final_decision": "reject",
             "final_category": None,
             "final_reason": title_result["reason"],
-            "themes_identified": [],
+            "matched_keywords": [],
             "confidence": title_result["confidence"]
         }
     
-    abstract_result = analyze_abstract(abstract, themes, concepts, title_result)
+    abstract_result = analyze_abstract(abstract, keywords, title_result)
     
     return {
         "article": article,
@@ -122,7 +126,7 @@ def analyze_article(article: Dict, themes: Dict, concepts: Dict) -> Dict:
         "final_decision": abstract_result["decision"],
         "final_category": abstract_result["category"],
         "final_reason": abstract_result["reason"],
-        "themes_identified": abstract_result["themes_identified"],
+        "matched_keywords": abstract_result.get("matched_keywords", []),
         "confidence": abstract_result["confidence"]
     }
 
@@ -141,8 +145,10 @@ def generate_output_markdown(results: List[Dict], parsed_problematique: Dict) ->
     cat_c = [r for r in accepted if r["final_category"] == "C"]
     
     output = []
-    output.append("# Analyse de pertinence des articles\n")
-    output.append(f"*Généré le {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n")
+    output.append("# Candidats pré-filtrés (Phase A)\n")
+    output.append(f"*Généré automatiquement le {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n")
+    output.append("⚠️ **ATTENTION** : Cette liste contient des **faux positifs**.")
+    output.append("L'agent IA doit valider chaque article en Phase B pour produire `final_selection.md`.\n")
     
     # Résumé
     output.append("\n## Résumé\n")
@@ -150,12 +156,12 @@ def generate_output_markdown(results: List[Dict], parsed_problematique: Dict) ->
     output.append(f"- **Articles retenus (pertinents) :** {len(accepted)}")
     output.append(f"- **Articles rejetés (non pertinents) :** {len(rejected)}\n")
     
-    output.append("### Répartition des articles retenus par catégorie\n")
-    output.append("| Catégorie | Nombre |")
-    output.append("|-----------|--------|")
-    output.append(f"| A. Thèmes primaires | {len(cat_a)} |")
-    output.append(f"| B. Thèmes secondaires | {len(cat_b)} |")
-    output.append(f"| C. Thèmes voisins | {len(cat_c)} |")
+    output.append("### Répartition provisoire par catégorie\n")
+    output.append("| Catégorie (provisoire) | Nombre |")
+    output.append("|------------------------|--------|")
+    output.append(f"| A. Lien direct (à valider) | {len(cat_a)} |")
+    output.append(f"| B. Lien indirect (à valider) | {len(cat_b)} |")
+    output.append(f"| C. Même domaine (à valider) | {len(cat_c)} |")
     
     output.append("\n---\n")
     
@@ -166,7 +172,7 @@ def generate_output_markdown(results: List[Dict], parsed_problematique: Dict) ->
         article = result["article"]
         
         output.append(f"### Article {i} : {article['title']}\n")
-        output.append(f"- **Auteurs :** {article.get('authors', 'N/A')}")
+        output.append(f"- **Auteurs :** {article.get('authors', 'N/A') or 'N/A'}")
         output.append(f"- **DOI :** {article.get('doi', 'N/A')}")
         if article.get('doi'):
             output.append(f"- **Lien :** https://doi.org/{article['doi']}")
@@ -178,13 +184,13 @@ def generate_output_markdown(results: List[Dict], parsed_problematique: Dict) ->
         else:
             output.append("> *Abstract non disponible*\n")
         
-        output.append("#### Thèmes identifiés (par ordre de prédominance)\n")
-        themes_identified = result.get("themes_identified", [])
-        if themes_identified:
-            for j, theme in enumerate(themes_identified[:5], 1):
-                output.append(f"{j}. {theme}")
+        output.append("#### Mots-clés correspondants\n")
+        matched_keywords = result.get("matched_keywords", [])
+        if matched_keywords:
+            for j, kw in enumerate(matched_keywords[:10], 1):
+                output.append(f"{j}. {kw}")
         else:
-            output.append("1. Aucun thème identifié")
+            output.append("*Aucun mot-clé correspondant*")
         
         output.append("\n#### Décision\n")
         decision = "pertinent" if result["final_decision"] == "accept" else "non pertinent"
@@ -197,15 +203,15 @@ def generate_output_markdown(results: List[Dict], parsed_problematique: Dict) ->
         output.append("- **Justification :**")
         output.append(f"  - {result['final_reason']}")
         
-        # Ajouter les détails des correspondances
+        # Ajouter les détails des correspondances par catégorie
         if result.get("abstract_analysis"):
-            matched = result["abstract_analysis"].get("matched_themes", {})
+            matched = result["abstract_analysis"].get("matched_by_category", {})
             if matched.get("primary"):
-                output.append(f"  - Thèmes primaires trouvés: {', '.join(matched['primary'])}")
+                output.append(f"  - Keywords primaires: {', '.join(matched['primary'])}")
             if matched.get("secondary"):
-                output.append(f"  - Thèmes secondaires trouvés: {', '.join(matched['secondary'])}")
+                output.append(f"  - Keywords secondaires: {', '.join(matched['secondary'])}")
             if matched.get("domain"):
-                output.append(f"  - Thèmes du domaine trouvés: {', '.join(matched['domain'])}")
+                output.append(f"  - Keywords domaine: {', '.join(matched['domain'])}")
         
         output.append("\n---\n")
     
@@ -220,18 +226,18 @@ def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     results_dir = os.path.join(base_dir, "results")
     
-    problematique_file = os.path.join(results_dir, "analyse_problematique.md")
+    keywords_file = os.path.join(results_dir, "keywords.json")
     articles_file = os.path.join(results_dir, "articles_fetched.md")
-    output_file = os.path.join(results_dir, "first_analysis.md")
+    output_file = os.path.join(results_dir, "candidates.md")
     
     print("=" * 60)
     print("🔍 ANALYSE DE PERTINENCE DES ARTICLES")
     print("=" * 60)
     
     # Vérifier les fichiers d'entrée
-    if not os.path.exists(problematique_file):
-        print(f"❌ Fichier non trouvé: {problematique_file}")
-        print("   → Exécutez d'abord l'étape 2 pour générer analyse_problematique.md")
+    if not os.path.exists(keywords_file):
+        print(f"❌ Fichier non trouvé: {keywords_file}")
+        print("   → Exécutez d'abord l'étape 2 pour générer keywords.json")
         sys.exit(1)
     
     if not os.path.exists(articles_file):
@@ -239,17 +245,14 @@ def main():
         print("   → Exécutez d'abord l'étape 3 (python3 fetch_all.py)")
         sys.exit(1)
     
-    # Parser la problématique
-    print(f"\n📖 Lecture de {problematique_file}...")
-    parsed = parse_analyse_problematique(problematique_file)
+    # Parser les keywords
+    print(f"\n📖 Lecture de {keywords_file}...")
+    keywords = parse_keywords_json(keywords_file)
     
-    themes = parsed["themes"]
-    concepts = parsed["concepts"]
-    
-    print(f"   Thèmes primaires: {len(themes.get('primary', []))}")
-    print(f"   Thèmes secondaires: {len(themes.get('secondary', []))}")
-    print(f"   Thèmes du domaine: {len(themes.get('domain', []))}")
-    print(f"   Concepts (verbes + noms): {len(concepts.get('verbs', [])) + len(concepts.get('nouns', []))}")
+    print(f"   Keywords primaires: {len(keywords.get('primary', []))}")
+    print(f"   Keywords secondaires: {len(keywords.get('secondary', []))}")
+    print(f"   Keywords domaine: {len(keywords.get('domain', []))}")
+    print(f"   Total keywords: {len(keywords.get('all_keywords', []))}")
     
     # Parser les articles
     print(f"\n📚 Lecture de {articles_file}...")
@@ -262,7 +265,7 @@ def main():
     
     for i, article in enumerate(articles, 1):
         print(f"   [{i}/{len(articles)}] {article['title'][:50]}...", end=" ")
-        result = analyze_article(article, themes, concepts)
+        result = analyze_article(article, keywords)
         results.append(result)
         
         status = "✅" if result["final_decision"] == "accept" else "❌"
@@ -271,7 +274,7 @@ def main():
     
     # Générer le fichier de sortie
     print(f"\n📝 Génération de {output_file}...")
-    output_content = generate_output_markdown(results, parsed)
+    output_content = generate_output_markdown(results, keywords)
     
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(output_content)
