@@ -8,6 +8,7 @@ Sources utilisées (dans l'ordre de priorité) :
 3. Semantic Scholar - OpenAccess PDF
 4. arXiv - Preprints
 5. Europe PMC - Articles biomédicaux
+6. Sci-Hub - Accès alternatif
 
 Usage:
     python download_pdf.py <doi>
@@ -234,6 +235,163 @@ def find_pdf_europe_pmc(doi: str) -> Optional[PDFSource]:
     return None
 
 
+def find_pdf_scihub(doi: str, mirror: str = "https://sci-hub.red") -> Optional[PDFSource]:
+    """Cherche un PDF via Sci-Hub."""
+    doi = _normalize_doi(doi)
+    if not doi:
+        return None
+    
+    # Sci-Hub utilise le DOI directement dans l'URL
+    scihub_url = f"{mirror}/{doi}"
+    
+    # Essayer de récupérer la page et extraire le lien PDF
+    req = urllib.request.Request(
+        scihub_url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,*/*",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+            
+            # Patterns spécifiques à Sci-Hub
+            pdf_patterns = [
+                # Pattern pour href="/download/..."
+                r'href\s*=\s*["\'](/download/[^"\']+\.pdf)["\']',
+                # Pattern pour data="/storage/..."
+                r'data\s*=\s*["\'](/storage/[^"\'#]+\.pdf)',
+                # Pattern générique pour /storage/
+                r'["\'](/storage/[^"\'#]+\.pdf)',
+                # Pattern pour embed/object avec data
+                r'<object[^>]+data\s*=\s*["\']([^"\'#]+\.pdf)',
+            ]
+            
+            for pattern in pdf_patterns:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    pdf_url = match.group(1)
+                    # Corriger les URLs relatives
+                    if pdf_url.startswith("//"):
+                        pdf_url = "https:" + pdf_url
+                    elif pdf_url.startswith("/"):
+                        pdf_url = mirror + pdf_url
+                    return PDFSource(url=pdf_url, source_name="Sci-Hub", is_direct_pdf=True)
+                
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        pass
+    
+    return None
+
+
+def find_pdf_libgen(doi: str) -> Optional[PDFSource]:
+    """Cherche un PDF via Library Genesis."""
+    doi = _normalize_doi(doi)
+    if not doi:
+        return None
+    
+    # LibGen API
+    libgen_url = f"https://libgen.rs/scimag/?q={urllib.parse.quote(doi)}"
+    
+    req = urllib.request.Request(
+        libgen_url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+            "Accept": "text/html,*/*",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+            
+            # Chercher le lien de téléchargement
+            patterns = [
+                r'href=["\']([^"\']*library\.lol[^"\']*)["\']',
+                r'href=["\']([^"\']*libgen\.[^"\']*get\.php[^"\']*)["\']',
+                r'href=["\']([^"\']*download[^"\']*\.pdf)["\']',
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    return PDFSource(url=match.group(1), source_name="LibGen", is_direct_pdf=True)
+                    
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        pass
+    
+    return None
+
+
+def find_pdf_core(doi: str) -> Optional[PDFSource]:
+    """Cherche un PDF via CORE (core.ac.uk)."""
+    doi = _normalize_doi(doi)
+    if not doi:
+        return None
+    
+    # CORE API
+    core_url = f"https://core.ac.uk/api-v2/search/works?q=doi:{urllib.parse.quote(doi)}"
+    
+    data = _http_get_json(core_url)
+    if data and isinstance(data, dict):
+        results = data.get("results", [])
+        if results:
+            for result in results:
+                download_url = result.get("downloadUrl")
+                if download_url:
+                    return PDFSource(url=download_url, source_name="CORE", is_direct_pdf=True)
+    
+    return None
+
+
+def find_pdf_crossref(doi: str) -> Optional[PDFSource]:
+    """Cherche un lien PDF via CrossRef."""
+    doi = _normalize_doi(doi)
+    if not doi:
+        return None
+    
+    crossref_url = f"https://api.crossref.org/works/{urllib.parse.quote(doi)}"
+    
+    data = _http_get_json(crossref_url)
+    if data and isinstance(data, dict):
+        message = data.get("message", {})
+        
+        # Chercher les liens
+        links = message.get("link", [])
+        for link in links:
+            if isinstance(link, dict):
+                content_type = link.get("content-type", "")
+                url = link.get("URL", "")
+                if "pdf" in content_type.lower() and url:
+                    return PDFSource(url=url, source_name="CrossRef", is_direct_pdf=True)
+    
+    return None
+
+
+def find_pdf_doaj(doi: str) -> Optional[PDFSource]:
+    """Cherche un PDF via DOAJ (Directory of Open Access Journals)."""
+    doi = _normalize_doi(doi)
+    if not doi:
+        return None
+    
+    doaj_url = f"https://doaj.org/api/search/articles/doi:{urllib.parse.quote(doi)}"
+    
+    data = _http_get_json(doaj_url)
+    if data and isinstance(data, dict):
+        results = data.get("results", [])
+        if results:
+            bibjson = results[0].get("bibjson", {})
+            links = bibjson.get("link", [])
+            for link in links:
+                if isinstance(link, dict) and link.get("type") == "fulltext":
+                    url = link.get("url", "")
+                    if url:
+                        return PDFSource(url=url, source_name="DOAJ", is_direct_pdf=False)
+    
+    return None
+
+
 # ============================================================================
 # Fonction principale
 # ============================================================================
@@ -245,8 +403,19 @@ def find_pdf_sources(doi: str) -> list[PDFSource]:
     """
     sources = []
     
-    # Essayer chaque source
+    # Miroirs Sci-Hub à essayer
+    scihub_mirrors = [
+        "https://sci-hub.red",
+        "https://sci-hub.st",
+        "https://sci-hub.se",
+        "https://sci-hub.ru",
+    ]
+    
+    # Essayer chaque source - Sci-Hub en premier car plus efficace
     finders = [
+        ("Sci-Hub (red)", lambda d: find_pdf_scihub(d, "https://sci-hub.red")),
+        ("Sci-Hub (st)", lambda d: find_pdf_scihub(d, "https://sci-hub.st")),
+        ("Sci-Hub (se)", lambda d: find_pdf_scihub(d, "https://sci-hub.se")),
         ("Unpaywall", find_pdf_unpaywall),
         ("OpenAlex", find_pdf_openalex),
         ("SemanticScholar", find_pdf_semantic_scholar),
@@ -269,6 +438,7 @@ def find_pdf_sources(doi: str) -> list[PDFSource]:
 def download_pdf(doi: str, output_dir: Path) -> Tuple[bool, str, Optional[Path]]:
     """
     Télécharge le PDF d'un article.
+    Cherche et télécharge en même temps - arrête dès le premier succès.
     
     Returns:
         (success, message, output_path)
@@ -277,23 +447,63 @@ def download_pdf(doi: str, output_dir: Path) -> Tuple[bool, str, Optional[Path]]
     if not doi:
         return False, "DOI invalide", None
     
-    # Chercher les sources
-    sources = find_pdf_sources(doi)
-    
-    if not sources:
-        return False, "Aucune source PDF trouvée", None
-    
-    # Essayer de télécharger depuis chaque source
     filename = _doi_to_filename(doi)
     output_path = output_dir / filename
     
-    for source in sources:
-        print(f"  📥 Tentative: {source.source_name} ({source.url[:60]}...)")
-        
-        if _download_file(source.url, output_path):
-            return True, f"Téléchargé depuis {source.source_name}", output_path
+    # Miroirs Sci-Hub à essayer
+    scihub_mirrors = [
+        "https://sci-hub.red",
+        "https://sci-hub.st", 
+        "https://sci-hub.se",
+    ]
     
-    return False, f"Échec du téléchargement ({len(sources)} sources essayées)", None
+    # Essayer Sci-Hub en premier (plus efficace)
+    for mirror in scihub_mirrors:
+        try:
+            source = find_pdf_scihub(doi, mirror)
+            if source:
+                print(f"  📥 Tentative: Sci-Hub ({source.url[:60]}...)")
+                if _download_file(source.url, output_path):
+                    return True, f"Téléchargé depuis Sci-Hub", output_path
+        except Exception:
+            pass
+        time.sleep(0.3)
+    
+    # Essayer LibGen (souvent efficace)
+    try:
+        source = find_pdf_libgen(doi)
+        if source:
+            print(f"  📥 Tentative: LibGen ({source.url[:60]}...)")
+            if _download_file(source.url, output_path):
+                return True, "Téléchargé depuis LibGen", output_path
+    except Exception:
+        pass
+    time.sleep(0.3)
+    
+    # Essayer les autres sources Open Access
+    other_finders = [
+        ("Unpaywall", find_pdf_unpaywall),
+        ("OpenAlex", find_pdf_openalex),
+        ("SemanticScholar", find_pdf_semantic_scholar),
+        ("CrossRef", find_pdf_crossref),
+        ("CORE", find_pdf_core),
+        ("DOAJ", find_pdf_doaj),
+        ("arXiv", find_pdf_arxiv),
+        ("EuropePMC", find_pdf_europe_pmc),
+    ]
+    
+    for name, finder in other_finders:
+        try:
+            source = finder(doi)
+            if source:
+                print(f"  📥 Tentative: {name} ({source.url[:60]}...)")
+                if _download_file(source.url, output_path):
+                    return True, f"Téléchargé depuis {name}", output_path
+        except Exception:
+            pass
+        time.sleep(0.3)
+    
+    return False, "Aucune source n'a fonctionné", None
 
 
 def check_accessibility(doi: str) -> Tuple[bool, list[str]]:
