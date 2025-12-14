@@ -1,82 +1,134 @@
-# Étape 5 : Téléchargement des articles
+# Étape 5 : Tri et sélection des articles
 
 ## 1. Objectif
 
-Télécharger les **PDFs complets** des articles retenus à l'étape 4 pour permettre une analyse approfondie.
+Trier les articles analysés à l'étape 4 pour déterminer leur **pertinence par rapport à la problématique**.
+
+Cette sélection est faite **par toi** (l'IA), en te basant sur :
+- Les **fiches de compréhension** de l'étape 4
+- Les **thèmes identifiés** à l'étape 2 (`../results/themes.json`)
 
 **Fichiers d'entrée :**
-- `../results/final_selection.md` — Articles validés (étape 4, Phase B)
+- `../results/articles_analysis.md` — Fiches de compréhension des articles (étape 4)
+- `../results/articles_analysis.csv` — Fichier CSV à enrichir
+- `../results/themes.json` — Thèmes de référence (primaires, secondaires, voisins)
 
 **Fichiers de sortie :**
-- `../results/pdfs/` — Dossier contenant les PDFs téléchargés
-- `../results/download_report.md` — Rapport de téléchargement
-- `../results/unavailable_articles.md` — Articles non accessibles (si applicable)
+- `../results/selection_report.md` — Rapport de sélection des articles
+- `../results/articles_analysis.csv` — **Fichier final** avec colonnes `selection` et `justification` complétées
 
 ---
 
-## 2. Commandes disponibles
+## 2. Processus d'analyse
 
-### Télécharger tous les articles sélectionnés
+Pour **chaque article**, applique le processus suivant dans l'ordre :
 
-```bash
-python3 ../tools/download_pdfs/download_all.py
-```
+### Étape 5.1 — Comparaison avec les thèmes
 
-### Vérifier l'accessibilité d'un article spécifique
+Pour chaque article, compare les **thèmes identifiés dans sa fiche** (step 4) avec les thèmes du fichier `../results/themes.json`.
 
-```bash
-python3 ../tools/download_pdfs/download_pdf.py --check <DOI>
-```
+| Résultat | Action |
+|----------|--------|
+| Les thèmes de l'article correspondent à un ou plusieurs thèmes du JSON | → Retenir l'article |
+| Aucun thème de l'article ne correspond aux thèmes du JSON | → Rejeter l'article |
 
-### Télécharger un article spécifique
+### Étape 5.2 — Classification par catégorie
 
-```bash
-python3 ../tools/download_pdfs/download_pdf.py <DOI>
-python3 ../tools/download_pdfs/download_pdf.py <DOI> --output ../results/pdfs/
-```
+Pour les articles retenus, indique à quelle catégorie de thèmes ils correspondent :
+- **A. Thème primaire** — Lien direct avec la problématique
+- **B. Thème secondaire** — Lien indirect, peut contribuer à la réponse
+- **C. Thème voisin** — Même domaine, mais ne répond pas à la problématique
+
+### Étape 5.3 — Mise à jour du CSV
+
+Pour chaque article, mets à jour le fichier `../results/articles_analysis.csv` :
+
+| Colonne | Valeur à remplir |
+|---------|------------------|
+| `selection` | "Retenu" ou "Rejeté" |
+| `justification` | Compléter avec la raison de la décision |
+
+**Format de la justification (brève mais explicite) :**
+
+| Cas | Exemple de justification |
+|-----|-------------------------|
+| Retenu par le titre | "Titre: traite de [thème X] en lien direct avec la problématique" |
+| Retenu par l'abstract | "Abstract: méthode de [X] applicable à [Y]" |
+| État de l'art retenu | "État de l'art sur [thème X], synthèse utile" |
+| Rejeté | "Hors sujet: traite de [thème Z] sans lien avec la problématique" |
 
 ---
 
-## 3. Sources de téléchargement
+## 3. Règles d'analyse
 
-Le script télécharge automatiquement les PDFs depuis des sources Open Access :
+### À faire
+- Te baser sur les **fiches de compréhension** de l'étape 4 (pas sur tes connaissances externes)
+- Justifier **chaque décision** avec des arguments concrets
+- Lister les thèmes abordés dans l'article par ordre de prédominance
+- Être **cohérent** avec les thèmes définis dans `../results/themes.json`
 
-| Source | Type | Description |
-|--------|------|-------------|
-| **Unpaywall** | API | Base de données d'accès ouvert légal |
-| **OpenAlex** | API | Index académique ouvert |
-| **Semantic Scholar** | API | PDFs Open Access |
-| **arXiv** | Direct | Preprints (si lien arXiv) |
-| **Europe PMC** | API | Articles biomédicaux |
+### À ne pas faire
+- Accepter un article sans justification
+- Rejeter un article sans explication claire
+- Inventer des informations non présentes dans le titre/abstract
+- Modifier les fichiers d'entrée
 
 ---
 
-## 4. Gestion des articles non accessibles
+## 4. Format du fichier de sortie
 
-### Si `unavailable_articles.md` contient des articles :
+Le fichier `../results/selection_report.md` doit suivre **exactement** ce squelette :
 
-⚠️ **STOP** — Certains articles ne sont pas en Open Access.
+```markdown
+# Analyse de pertinence des articles
 
-1. **Informe l'humain** qu'il y a des articles non accessibles
-2. **Attends** que l'humain récupère les PDFs manuellement
-3. Une fois les PDFs ajoutés dans `results/pdfs/`, continue
+## Résumé
 
-### Message à afficher à l'humain :
+- **Total d'articles analysés :** [nombre]
+- **Articles retenus (pertinents) :** [nombre]
+- **Articles rejetés (non pertinents) :** [nombre]
 
-```
-⚠️ ATTENTION : [N] article(s) ne sont pas accessibles en Open Access.
+### Répartition des articles retenus par catégorie
 
-Veuillez récupérer manuellement les PDFs listés dans : results/unavailable_articles.md
+| Catégorie | Nombre |
+|-----------|--------|
+| A. Thèmes primaires | [nombre] |
+| B. Thèmes secondaires | [nombre] |
+| C. Thèmes voisins | [nombre] |
 
-Options pour récupérer les articles :
-1. Accès via votre bibliothèque universitaire
-2. Demande aux auteurs (ResearchGate, email)
-3. Achat sur le site de l'éditeur
+---
 
-Placez les PDFs dans : results/pdfs/
-Nommez-les selon le format indiqué dans le fichier.
+## Articles analysés
 
-Une fois terminé, dites-moi "c'est fait" pour continuer.
+### Article 1 : [Titre de l'article]
+
+- **Auteurs :** [liste des auteurs]
+- **DOI :** [doi]
+- **Lien :** [https://doi.org/doi]
+
+#### Abstract
+
+> [Résumé de l'article]
+
+#### Thèmes identifiés (par ordre de prédominance)
+
+1. [thème principal]
+2. [thème secondaire]
+3. [...]
+
+#### Décision
+
+- **Selection :** pertinent / non pertinent
+- **Catégorie :** A / B / C (si pertinent)
+- **Justification :**
+  - [argument 1]
+  - [argument 2]
+  - [...]
+
+---
+
+### Article 2 : [Titre]
+[...]
 ```
 
 ---
@@ -84,9 +136,11 @@ Une fois terminé, dites-moi "c'est fait" pour continuer.
 ## 5. Validation
 
 Avant de passer à l'étape suivante, vérifie que :
-- [ ] Le dossier `../results/pdfs/` existe et contient des PDFs
-- [ ] Le fichier `../results/download_report.md` existe
-- [ ] **Si `unavailable_articles.md` existe** → L'humain a été informé et a ajouté les PDFs manquants
-- [ ] Tous les articles retenus ont un PDF disponible
+- [ ] Le fichier `../results/selection_report.md` existe
+- [ ] Le fichier `../results/articles_analysis.csv` est complet (toutes les colonnes remplies)
+- [ ] Chaque article a une décision (Retenu/Rejeté)
+- [ ] Chaque décision a une justification brève mais compréhensible
+- [ ] Les articles retenus sont classés par catégorie (A, B ou C)
+- [ ] Le résumé en début de fichier est à jour
 
 **Si tout est validé** → Passe à l'étape suivante : `./step6.md`

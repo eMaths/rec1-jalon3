@@ -1,121 +1,143 @@
-# Étape 4 : Analyse de pertinence des articles
+# Étape 4 : Compréhension des articles
 
 ## 1. Objectif
 
-Analyser chaque article récupéré à l'étape 3 pour déterminer sa **pertinence par rapport à la problématique**.
+Analyser et comprendre chaque article récupéré à l'étape 3 **sans effectuer de tri**.
 
-Cette analyse est faite **par toi** (l'IA), en te basant sur :
-- Le **titre** de l'article
-- L'**abstract** de l'article
-- Les **thèmes identifiés** à l'étape 2 (`../results/themes.json`)
+Le même travail d'analyse fait pour la problématique (étape 2) doit être fait ici pour **chaque article** : identifier les thèmes, comprendre le message des auteurs, et produire une brève analyse.
 
 **Fichiers d'entrée :**
-- `../results/articles_fetched.md` — Métadonnées des articles
-- `../results/themes.json` — Thèmes de référence (primaires, secondaires, voisins)
+- `../results/articles_fetched.md` — Métadonnées des articles avec abstracts
+- `../results/articles_analysis.csv` — Fichier CSV à enrichir
 
-**Fichier de sortie :**
-- `../results/first_analysis.md` — Analyse de pertinence de chaque article
+**Fichiers de sortie :**
+- `../results/articles_analysis.md` — Fiches d'analyse de chaque article
+- `../results/articles_analysis.csv` — Mise à jour des colonnes `issue_type` et `justification`
 
 ---
 
 ## 2. Processus d'analyse
 
-Pour **chaque article**, applique le processus suivant dans l'ordre :
+Pour **chaque article**, effectue les analyses suivantes :
 
-### Étape 4.1 — Analyse du titre
+### Étape 4.1 — Identification de la langue
 
-1. Lis le titre de l'article
-2. Compare-le aux thèmes du fichier `../results/themes.json`
+Identifie si l'article est en **français** ou en **anglais**.
+
+### Étape 4.2 — Analyse du titre
+
+À partir du titre uniquement :
+
+1. **Thèmes du titre** — Quels thèmes ressortent du titre ?
+2. **Brève analyse** — En 1-2 phrases, que nous dit le titre sur le sujet de l'article ?
+
+### Étape 4.3 — Analyse de l'abstract
+
+À partir de l'abstract :
+
+1. **Message des auteurs** — Qu'ont-ils voulu transmettre ? Qu'ont-ils fait ou montré ?
+2. **Thèmes de l'abstract** — Quels thèmes ressortent de l'abstract ?
+3. **Brève analyse** — En 2-3 phrases, de quoi parle l'article et quel est son apport ?
+
+### Étape 4.4 — Détection d'état de l'art
+
+Vérifie si l'article est **explicitement un état de l'art** (revue de littérature, survey, review, meta-analyse).
+
+Indices à rechercher :
+
+**Mots-clés indicateurs d'état de l'art :**
+- review
+- survey
+- state of the art / état de l'art
+- systematic review
+- literature review
+- scoping review
+- meta-analysis
+- overview
+- mapping study
+
+**Autres indices :**
+- L'abstract mentionne explicitement l'analyse d'autres articles/études
 
 | Résultat | Action |
 |----------|--------|
-| Le titre indique clairement que l'article est **hors sujet** | → Rejeter l'article (Selection = `non pertinent`, Justification = `Titre hors sujet`) |
-| Le titre suggère un **lien possible** avec la problématique ou le thème de la problématique | → Passer à l'analyse de l'abstract |
+| L'article est un état de l'art | → Marquer `Type : État de l'art` + mettre à jour le CSV |
+| L'article n'est PAS un état de l'art | → Marquer `Type : Article original` + mettre à jour le CSV |
 
-### Étape 4.2 — Analyse de l'abstract
+### Étape 4.5 — Mise à jour du CSV
 
-1. Lis l'abstract de l'article
-2. Identifie les thèmes abordés et compare-les à ceux de l'étape 2
+Pour chaque article, mets à jour le fichier `../results/articles_analysis.csv` :
 
-| Résultat | Action |
-|----------|--------|
-| L'abstract confirme que l'article est **hors sujet** | → Rejeter l'article (Selection = `non pertinent`, Justification = `Abstract hors sujet`) |
-| L'abstract confirme une **pertinence potentielle** selon les thèmes du fichier `../results/themes.json` | → Accepter l'article (Selection = `pertinent`, Justification = `Prêt pour analyse approfondie`) |
-
-### Étape 4.3 — Classification par catégorie
-
-Pour les articles retenus, indique à quelle catégorie de thèmes ils correspondent :
-- **A. Thème primaire** — Lien direct avec la problématique
-- **B. Thème secondaire** — Lien indirect, peut contribuer à la réponse
-- **C. Thème voisin** — Même domaine, mais ne répond pas à la problématique
+| Colonne | Valeur à remplir |
+|---------|------------------|
+| `issue_type` | "Article original" ou "État de l'art" |
+| `justification` | Brève explication des thèmes identifiés (ex: "Thèmes: apprentissage automatique, détection de fraude") |
 
 ---
 
 ## 3. Règles d'analyse
 
 ### À faire
-- Te baser **uniquement** sur le titre et l'abstract (pas sur tes connaissances externes)
-- Justifier **chaque décision** avec des arguments concrets
-- Lister les thèmes abordés dans l'article par ordre de prédominance
-- Être **cohérent** avec les thèmes définis dans `../results/themes.json`
+- Analyser **tous les articles** sans exception
+- Identifier les thèmes du titre **séparément** des thèmes de l'abstract
+- Être **factuel** et **concis** dans les analyses
+- Expliquer clairement ce que les auteurs ont cherché à faire/montrer
 
 ### À ne pas faire
-- Accepter un article sans justification
-- Rejeter un article sans explication claire
+- **Trier** ou **rejeter** des articles — ce n'est PAS l'objectif de cette étape
+- Juger de la pertinence par rapport à la problématique
 - Inventer des informations non présentes dans le titre/abstract
-- Modifier les fichiers d'entrée
 
 ---
 
 ## 4. Format du fichier de sortie
 
-Le fichier `../results/first_analysis.md` doit suivre **exactement** ce squelette :
+Le fichier `../results/articles_analysis.md` doit suivre ce format :
 
 ```markdown
-# Analyse de pertinence des articles
+# Analyse des articles
 
 ## Résumé
 
 - **Total d'articles analysés :** [nombre]
-- **Articles retenus (pertinents) :** [nombre]
-- **Articles rejetés (non pertinents) :** [nombre]
-
-### Répartition des articles retenus par catégorie
-
-| Catégorie | Nombre |
-|-----------|--------|
-| A. Thèmes primaires | [nombre] |
-| B. Thèmes secondaires | [nombre] |
-| C. Thèmes voisins | [nombre] |
+- **Articles en français :** [nombre]
+- **Articles en anglais :** [nombre]
 
 ---
 
-## Articles analysés
+## Fiches d'analyse
 
 ### Article 1 : [Titre de l'article]
 
 - **Auteurs :** [liste des auteurs]
 - **DOI :** [doi]
-- **Lien :** [https://doi.org/doi]
+- **Langue :** français / anglais
+- **Type :** Article original / État de l'art
 
-#### Abstract
+#### Analyse du titre
 
-> [Résumé de l'article]
+**Thèmes identifiés :**
+- [thème 1]
+- [thème 2]
+- [...]
 
-#### Thèmes identifiés (par ordre de prédominance)
+**Brève analyse :**
+[1-2 phrases expliquant ce que le titre nous dit sur le sujet]
 
-1. [thème principal]
-2. [thème secondaire]
-3. [...]
+#### Analyse de l'abstract
 
-#### Décision
+> [Abstract original]
 
-- **Selection :** pertinent / non pertinent
-- **Catégorie :** A / B / C (si pertinent)
-- **Justification :**
-  - [argument 1]
-  - [argument 2]
-  - [...]
+**Message des auteurs :**
+[Ce que les auteurs ont voulu transmettre, ce qu'ils ont fait ou montré]
+
+**Thèmes identifiés :**
+- [thème 1]
+- [thème 2]
+- [...]
+
+**Brève analyse :**
+[2-3 phrases sur le contenu et l'apport de l'article]
 
 ---
 
@@ -128,10 +150,12 @@ Le fichier `../results/first_analysis.md` doit suivre **exactement** ce squelett
 ## 5. Validation
 
 Avant de passer à l'étape suivante, vérifie que :
-- [ ] Le fichier `../results/first_analysis.md` existe
-- [ ] Chaque article a été analysé (titre + abstract)
-- [ ] Chaque décision est justifiée
-- [ ] Les articles retenus sont classés par catégorie (A, B ou C)
-- [ ] Le résumé en début de fichier est à jour
+- [ ] Le fichier `../results/articles_analysis.md` existe
+- [ ] Le fichier `../results/articles_analysis.csv` a été mis à jour (colonnes `issue_type` et `justification`)
+- [ ] **Tous** les articles ont été analysés (aucun exclu)
+- [ ] Chaque fiche contient l'analyse du titre ET de l'abstract
+- [ ] Les thèmes sont identifiés séparément pour le titre et l'abstract
+- [ ] La langue de chaque article est identifiée
+- [ ] Le type (article original ou état de l'art) est identifié pour chaque article
 
 **Si tout est validé** → Passe à l'étape suivante : `./step5.md`
