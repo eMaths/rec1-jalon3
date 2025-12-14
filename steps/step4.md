@@ -7,11 +7,11 @@ Analyser chaque article récupéré à l'étape 3 pour déterminer sa **pertinen
 Cette analyse est faite **par toi** (l'IA), en te basant sur :
 - Le **titre** de l'article
 - L'**abstract** de l'article
-- Les **thèmes identifiés** à l'étape 2 (`../results/analyse_problematique.md`)
+- Les **thèmes identifiés** à l'étape 2 (`../results/themes.json`)
 
 **Fichiers d'entrée :**
 - `../results/articles_fetched.md` — Métadonnées des articles
-- `../results/analyse_problematique.md` — Thèmes de référence (primaires, secondaires, voisins)
+- `../results/themes.json` — Thèmes de référence (primaires, secondaires, voisins)
 
 **Fichier de sortie :**
 - `../results/first_analysis.md` — Analyse de pertinence de chaque article
@@ -25,7 +25,7 @@ Pour **chaque article**, applique le processus suivant dans l'ordre :
 ### Étape 4.1 — Analyse du titre
 
 1. Lis le titre de l'article
-2. Compare-le aux thèmes identifiés à l'étape 2
+2. Compare-le aux thèmes du fichier `../results/themes.json`
 
 | Résultat | Action |
 |----------|--------|
@@ -40,7 +40,7 @@ Pour **chaque article**, applique le processus suivant dans l'ordre :
 | Résultat | Action |
 |----------|--------|
 | L'abstract confirme que l'article est **hors sujet** | → Rejeter l'article (Selection = `non pertinent`, Justification = `Abstract hors sujet`) |
-| L'abstract confirme une **pertinence potentielle** selon les thèmes identifiés à l'étape 2 dans le fichier `../results/analyse_problematique.md` | → Accepter l'article (Selection = `pertinent`, Justification = `Prêt pour analyse approfondie`) |
+| L'abstract confirme une **pertinence potentielle** selon les thèmes du fichier `../results/themes.json` | → Accepter l'article (Selection = `pertinent`, Justification = `Prêt pour analyse approfondie`) |
 
 ### Étape 4.3 — Classification par catégorie
 
@@ -57,7 +57,7 @@ Pour les articles retenus, indique à quelle catégorie de thèmes ils correspon
 - Te baser **uniquement** sur le titre et l'abstract (pas sur tes connaissances externes)
 - Justifier **chaque décision** avec des arguments concrets
 - Lister les thèmes abordés dans l'article par ordre de prédominance
-- Être **cohérent** avec les thèmes définis à l'étape 2
+- Être **cohérent** avec les thèmes définis dans `../results/themes.json`
 
 ### À ne pas faire
 - Accepter un article sans justification

@@ -5,7 +5,9 @@
 Analyser la problématique pour en extraire les **thèmes et mots-clés** qui serviront de critères de sélection des articles dans les étapes suivantes.
 
 **Fichier d'entrée :** `../data/problematique.md`  
-**Fichier de sortie :** `../results/analyse_problematique.md`
+**Fichiers de sortie :**
+- `../results/analyse_problematique.md` — Analyse détaillée avec justifications
+- `../results/themes.json` — Liste structurée des thèmes pour le filtrage automatique
 
 ---
 
@@ -48,7 +50,9 @@ Classe les thèmes identifiés en **trois catégories distinctes** :
 - Lister des thèmes **hors sujet** (sans lien avec la problématique)
 - Faire des paragraphes trop longs ou du remplissage
 - Ajouter des schémas ou diagrammes
-- Lister des thèmes "non pertinents" (on ne garde que le pertinent, celui des 3 catégories citées)
+- Lister des thèmes "non pertinents" ou "hors sujet" — **on ne cite que les thèmes pertinents**
+
+> **Principe de filtrage :** Tout article qui correspond à un des thèmes listés (primaires, secondaires ou voisins) sera retenu. Les autres seront exclus. Il n'y a pas de catégorie "non pertinent" à définir.
 
 ---
 
@@ -114,8 +118,31 @@ Le fichier `../results/analyse_problematique.md` doit suivre **exactement** ce s
 
 Avant de passer à l'étape suivante, vérifie que :
 - [ ] Le fichier `../results/analyse_problematique.md` existe
+- [ ] Le fichier `../results/themes.json` existe et est valide
 - [ ] Les trois catégories de thèmes sont bien distinctes
 - [ ] Chaque thème a une justification
+- [ ] Aucun thème "non pertinent" ou "hors sujet" n'est listé
 - [ ] Le raisonnement est compréhensible par un lecteur externe
+
+---
+
+## 6. Fichier JSON de sortie
+
+En plus du fichier Markdown, génère un fichier `../results/themes.json` avec la structure suivante :
+
+```json
+{
+  "themes_primaires": ["themeLePlusPertinent", "deuxiemeThemePlusPertinent", "..."],
+  "themes_secondaires": ["themeLePlusPertinent", "deuxiemeThemePlusPertinent", "..."],
+  "themes_voisins": ["themeLePlusPertinent", "deuxiemeThemePlusPertinent", "..."]
+}
+```
+
+**Règles :**
+- Les thèmes sont classés **par ordre de pertinence décroissante** dans chaque liste
+- Utiliser les mêmes noms de thèmes que dans le fichier Markdown
+- Ce fichier servira au filtrage automatique des articles dans les étapes suivantes
+
+---
 
 **Si tout est validé** → Passe à l'étape suivante : `./step3.md`
